@@ -1,0 +1,16 @@
+using System.Data;
+
+namespace pengdows.crud;
+
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class ColumnAttribute : Attribute
+{
+    public ColumnAttribute(string name, DbType type)
+    {
+        Name = name;
+        Type = type;
+    }
+
+    public string Name { get; }
+    public DbType Type { get; }
+}
