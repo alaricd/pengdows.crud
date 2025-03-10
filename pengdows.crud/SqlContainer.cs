@@ -1,14 +1,18 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 
 namespace pengdows.crud;
 
-public class SqlContainer:ISqlContainer
+public class SqlContainer : ISqlContainer
 {
     private readonly IDbContext _context;
     private readonly List<DbParameter> _parameters = new();
+
+    private static readonly ConcurrentDictionary<Type, Dictionary<int, Action<object, object>>> _setterCache = new();
 
     public SqlContainer(IDbContext context, string query = "")
     {
@@ -51,116 +55,112 @@ public class SqlContainer:ISqlContainer
 
     private void Cleanup(DbCommand cmd, DbConnection conn)
     {
-        ClearCommand(cmd);
+        cmd.Parameters.Clear();
         if (!(_context is TransactionContext))
             conn.Dispose();
     }
 
-    private void ClearCommand(DbCommand cmd)
+    private Dictionary<int, Action<object, object>> BuildPropertySetterMap<T>(DbDataReader reader, TableInfo tableInfo)
     {
-        cmd?.Parameters?.Clear();
-    }
+        var setters = new Dictionary<int, Action<object, object>>();
 
-    public async Task<DbDataReader> ExecuteReaderAsync()
-    {
-        var conn = _context.GetConnection(ExecutionType.Read);
-        DbCommand cmd = null;
-        try
-        {
-            cmd = PrepareCommand(conn);
-            var behavior = DetermineCommandBehavior();
-            var reader = await cmd.ExecuteReaderAsync(behavior);
-            ClearCommand(cmd); // Ensure parameters are cleared after execution
-            return reader;
-        }
-        catch
-        {
-            Cleanup(cmd, conn);
-            throw;
-        }
-    }
-
-    public async Task<T?> ExecuteScalarAsync<T>()
-    {
-        var conn = _context.GetConnection(ExecutionType.Read);
-        DbCommand cmd = null;
-        try
-        {
-            cmd = PrepareCommand(conn);
-            var result = await cmd.ExecuteScalarAsync();
-            return result is T value ? value : default;
-        }
-        finally
-        {
-            Cleanup(cmd, conn);
-        }
-    }
-
-    public async Task<int> ExecuteNonQueryAsync()
-    {
-        var conn = _context.GetConnection(ExecutionType.Write);
-        DbCommand? cmd = null;
-        try
-        {
-            cmd = PrepareCommand(conn);
-            var result = await cmd.ExecuteNonQueryAsync();
-            return result;
-        }
-        finally
-        {
-            Cleanup(cmd, conn);
-        }
-    }
-
-    private T MapReaderToObject<T>(DbDataReader reader, Dictionary<int, PropertyInfo>? map = null) where T : new()
-    {
-        var obj = new T();
-        var tableInfo = TypeMapRegistry.GetTableInfo<T>();
-        map ??= CreateMap(reader, tableInfo);
-        
         foreach (var column in tableInfo.Columns.Values)
         {
-            var value = reader[column.Name];
-            if (value != DBNull.Value)
+            var ordinal = reader.GetOrdinal(column.Name);
+            if (ordinal >= 0)
             {
-                column.PropertyInfo.SetValue(obj, value);
+                var setter = CreateSetter(column.PropertyInfo);
+                if (setter != null)
+                    setters[ordinal] = setter;
+            }
+        }
+
+        return setters;
+    }
+
+    private Action<object, object>? CreateSetter(PropertyInfo propInfo)
+    {
+        var instance = Expression.Parameter(typeof(object), "instance");
+        var value = Expression.Parameter(typeof(object), "value");
+
+        var body = Expression.Assign(
+            Expression.Property(Expression.Convert(instance, propInfo.DeclaringType!),
+                                propInfo),
+            Expression.Convert(value, propInfo.PropertyType));
+
+        return Expression.Lambda<Action<object, object>>(body, instance, value).Compile();
+    }
+
+    private T MapReaderToObject<T>(DbDataReader reader) where T : new()
+    {
+        var obj = new T();
+        var type = typeof(T);
+
+        var setters = _setterCache.GetOrAdd(type, _ =>
+        {
+            var tableInfo = TypeMapRegistry.GetTableInfo<T>();
+            return BuildPropertySetterMap(reader, tableInfo);
+        });
+
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            if (reader.IsDBNull(i)) continue;
+            if (setters.TryGetValue(i, out var setter))
+            {
+                var value = reader.GetValue(i);
+                setter(obj, value);
             }
         }
 
         return obj;
     }
 
-    private Dictionary<int, PropertyInfo> CreateMap(DbDataReader reader, TableInfo tableInfo)
+    private async Task<T> ExecuteAsync<T>(Func<DbCommand, Task<T>> action, ExecutionType executionType)
     {
-       var map = new  Dictionary<int, PropertyInfo>();
-       foreach(var itm in tableInfo.Columns)
-       {
-          var idx =  reader.GetOrdinal(itm.Value.Name);
-          if (idx >-1)
-          {
-              map.Add(idx, itm.Value.PropertyInfo);
-          }
-       }
-
-       return map;
+        var conn = _context.GetConnection(executionType);
+        DbCommand? cmd = null;
+        try
+        {
+            cmd = PrepareCommand(conn);
+            return await action(cmd).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (cmd != null)
+                Cleanup(cmd, conn);
+        }
     }
+
+    public async Task<DbDataReader> ExecuteReaderAsync() =>
+        await ExecuteAsync(async cmd =>
+        {
+            var behavior = DetermineCommandBehavior();
+            return await cmd.ExecuteReaderAsync(behavior).ConfigureAwait(false);
+        }, ExecutionType.Read);
+
+    public async Task<T?> ExecuteScalarAsync<T>() =>
+        await ExecuteAsync(async cmd =>
+        {
+            var result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
+            return result is T value ? value : default;
+        }, ExecutionType.Read);
+
+    public async Task<int> ExecuteNonQueryAsync() =>
+        await ExecuteAsync(cmd => cmd.ExecuteNonQueryAsync(), ExecutionType.Write);
 
     public async Task<T?> LoadSingleAsync<T>() where T : new()
     {
-        await using var reader = await ExecuteReaderAsync();
-        return await reader.ReadAsync() ? MapReaderToObject<T>(reader) : default;
+        await using var reader = await ExecuteReaderAsync().ConfigureAwait(false);
+        return await reader.ReadAsync().ConfigureAwait(false) ? MapReaderToObject<T>(reader) : default;
     }
 
     public async Task<List<T>> LoadListAsync<T>() where T : new()
     {
         var list = new List<T>();
-        await using var reader = await ExecuteReaderAsync();
-var map = CreateMap(reader, TypeMapRegistry.GetTableInfo<T>());
-        while (await reader.ReadAsync())
-        {
-            var item = MapReaderToObject<T>(reader, map);
-            list.Add(item);
-        }
+        await using var reader = await ExecuteReaderAsync().ConfigureAwait(false);
+
+        while (await reader.ReadAsync().ConfigureAwait(false))
+            list.Add(MapReaderToObject<T>(reader));
 
         return list;
     }

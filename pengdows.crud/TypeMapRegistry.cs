@@ -3,11 +3,11 @@ using System.Reflection;
 
 namespace pengdows.crud;
 
-public static class TypeMapRegistry 
+public  class TypeMapRegistry:ITypeMapRegistry 
 {
-    private static readonly ConcurrentDictionary<Type, TableInfo> TypeMap = new();
+    private  readonly ConcurrentDictionary<Type, TableInfo> TypeMap = new();
 
-    public static TableInfo GetTableInfo<T>()
+    public  TableInfo GetTableInfo<T>()
     {
         var type = typeof(T);
 
