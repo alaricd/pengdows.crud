@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace pengdows.crud;
 
-public static class TypeMapRegistry
+public static class TypeMapRegistry 
 {
     private static readonly ConcurrentDictionary<Type, TableInfo> TypeMap = new();
 

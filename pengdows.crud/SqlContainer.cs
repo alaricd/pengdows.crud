@@ -1,10 +1,11 @@
 using System.Data;
 using System.Data.Common;
+using System.Reflection;
 using System.Text;
 
 namespace pengdows.crud;
 
-public class SqlContainer
+public class SqlContainer:ISqlContainer
 {
     private readonly IDbContext _context;
     private readonly List<DbParameter> _parameters = new();
@@ -98,7 +99,7 @@ public class SqlContainer
     public async Task<int> ExecuteNonQueryAsync()
     {
         var conn = _context.GetConnection(ExecutionType.Write);
-        DbCommand cmd = null;
+        DbCommand? cmd = null;
         try
         {
             cmd = PrepareCommand(conn);
@@ -111,11 +112,12 @@ public class SqlContainer
         }
     }
 
-    private T MapReaderToObject<T>(DbDataReader reader) where T : new()
+    private T MapReaderToObject<T>(DbDataReader reader, Dictionary<int, PropertyInfo>? map = null) where T : new()
     {
         var obj = new T();
         var tableInfo = TypeMapRegistry.GetTableInfo<T>();
-
+        map ??= CreateMap(reader, tableInfo);
+        
         foreach (var column in tableInfo.Columns.Values)
         {
             var value = reader[column.Name];
@@ -128,20 +130,35 @@ public class SqlContainer
         return obj;
     }
 
-    public async Task<T?> FetchSingleAsync<T>() where T : new()
+    private Dictionary<int, PropertyInfo> CreateMap(DbDataReader reader, TableInfo tableInfo)
+    {
+       var map = new  Dictionary<int, PropertyInfo>();
+       foreach(var itm in tableInfo.Columns)
+       {
+          var idx =  reader.GetOrdinal(itm.Value.Name);
+          if (idx >-1)
+          {
+              map.Add(idx, itm.Value.PropertyInfo);
+          }
+       }
+
+       return map;
+    }
+
+    public async Task<T?> LoadSingleAsync<T>() where T : new()
     {
         await using var reader = await ExecuteReaderAsync();
         return await reader.ReadAsync() ? MapReaderToObject<T>(reader) : default;
     }
 
-    public async Task<List<T>> FetchListAsync<T>() where T : new()
+    public async Task<List<T>> LoadListAsync<T>() where T : new()
     {
         var list = new List<T>();
         await using var reader = await ExecuteReaderAsync();
-
+var map = CreateMap(reader, TypeMapRegistry.GetTableInfo<T>());
         while (await reader.ReadAsync())
         {
-            var item = MapReaderToObject<T>(reader);
+            var item = MapReaderToObject<T>(reader, map);
             list.Add(item);
         }
 

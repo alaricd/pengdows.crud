@@ -108,7 +108,55 @@ public abstract class DbContext : IDbContext
            
         }
     }
-    
+    public SqlContainer BuildUpdate<T>(T obj)
+    {
+        var tableInfo = TypeMapRegistry.GetTableInfo<T>();
+        var container = new SqlContainer(this);
+
+        var idColumn = tableInfo.Columns.Values.FirstOrDefault(c => c.IsId)
+                       ?? throw new InvalidOperationException("No Id column defined.");
+
+        var idValue = idColumn.PropertyInfo.GetValue(obj);
+        var idParam = container.AppendParameter(null, DbType.String, idValue);
+
+        var setClauses = new List<string>();
+        var whereClauses = new List<string>();
+
+        foreach (var column in tableInfo.Columns.Values.Where(c => !c.IsId))
+        {
+            var value = column.PropertyInfo.GetValue(obj);
+            var param = container.AppendParameter(null, DbType.String, value);
+
+            // SET clause
+            setClauses.Add($"{this.WrapObjectName(column.Name)} = {param.ParameterName}");
+
+            // WHERE clause for conditional update
+            whereClauses.Add($"({this.WrapObjectName(column.Name)} IS DISTINCT FROM {param.ParameterName})");
+        }
+
+        if (!setClauses.Any())
+            throw new InvalidOperationException("No columns to update.");
+
+        container.Query.Append($"UPDATE {this.WrapObjectName(tableInfo.Schema)}.{this.WrapObjectName(tableInfo.Name)}\n")
+            .Append($"SET {string.Join(", ", setClauses)}\n")
+            .Append($"WHERE {this.WrapObjectName(idColumn.Name)} = {idParam.ParameterName}\n")
+            .Append($"AND ({string.Join(" OR ", whereClauses)});");
+
+        return container;
+    }
+    public SqlContainer BuildDelete<T>(T obj)
+    {
+        var tableInfo = TypeMapRegistry.GetTableInfo<T>();
+        var container = new SqlContainer(this);
+
+        var idColumn = tableInfo.Columns.Values.FirstOrDefault(c => c.IsId) ?? throw new InvalidOperationException("No Id column defined.");
+        var idParameter = container.AppendParameter(null, DbType.String, idColumn.PropertyInfo.GetValue(obj));
+
+        container.Query.Append($"DELETE FROM {this.WrapObjectName(tableInfo.Schema)}.{this.WrapObjectName(tableInfo.Name)} WHERE {this.WrapObjectName(idColumn.Name)} = {idParameter.ParameterName};");
+
+        return container;
+    }
+
 
     ~DbContext()
     {
