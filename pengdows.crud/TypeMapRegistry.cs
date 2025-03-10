@@ -3,28 +3,34 @@ using System.Reflection;
 
 namespace pengdows.crud;
 
-public class TypeMapRegistry
+public static class TypeMapRegistry
 {
     private static readonly ConcurrentDictionary<Type, TableInfo> TypeMap = new();
 
     public static TableInfo GetTableInfo<T>()
     {
         var type = typeof(T);
+
         if (!TypeMap.TryGetValue(type, out var tableInfo))
         {
-            var tableAttr = type.GetCustomAttribute<TableAttribute>()
-                            ?? throw new InvalidOperationException($"Type {type.Name} does not have a TableAttribute.");
-
             tableInfo = new TableInfo
             {
-                Name = tableAttr.Name,
-                Schema = tableAttr.Schema ?? "dbo"
+                Name = type.GetCustomAttribute<TableAttribute>()?.Name ?? throw new InvalidOperationException($"Type {type.Name} does not have a TableAttribute."),
+                Schema = type.GetCustomAttribute<TableAttribute>()?.Schema ?? "dbo"
             };
 
-            foreach (var prop in type.GetProperties().Where(p => p.GetCustomAttribute<ColumnAttribute>() != null))
+            foreach (var prop in type.GetProperties())
             {
                 var colAttr = prop.GetCustomAttribute<ColumnAttribute>();
-                tableInfo.Columns[colAttr!.Name] = new ColumnInfo { Name = colAttr.Name, PropertyInfo = prop };
+                if (colAttr != null)
+                {
+                    tableInfo.Columns[prop.Name] = new ColumnInfo
+                    {
+                        Name = colAttr.Name,
+                        PropertyInfo = prop,
+                        IsId = prop.GetCustomAttribute<IdAttribute>() != null
+                    };
+                }
             }
 
             TypeMap[type] = tableInfo;
