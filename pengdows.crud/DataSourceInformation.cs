@@ -16,7 +16,7 @@ public class DataSourceInformation
         ParameterNamePatternRegex = new Regex(metaData.Rows[0]["ParameterNamePattern"].ToString() ?? "");
         DatabaseProductName = metaData.Rows[0]["DataSourceProductName"].ToString() ?? "Unknown";
         DatabaseProductVersion = metaData.Rows[0]["DataSourceProductVersion"].ToString() ?? "Unknown";
-        SchemaSeparator = metaData.Rows[0]["CompositeIdentifierSeparatorPattern"]?.ToString() ?? ".";
+        SchemaSeparator = metaData.Rows[0]["SchemaSeparator"]?.ToString() ?? ".";
     }
 
     public string QuotePrefix { get; }

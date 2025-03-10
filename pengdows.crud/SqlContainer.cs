@@ -1,4 +1,3 @@
-
 using System.Data;
 using System.Data.Common;
 using System.Text;
@@ -16,101 +15,136 @@ public class SqlContainer
         Query = new StringBuilder(query);
     }
 
-    public StringBuilder Query { get; }
+    public StringBuilder Query { get; } = new();
 
     public DbParameter AppendParameter<T>(string? name, DbType type, T value)
     {
-        var dsInfo = _context.DataSourceInfo;
-        
-        if (string.IsNullOrEmpty(name))
-        {
-            name = "param" + Guid.NewGuid().ToString("N").Substring(0, Math.Min(dsInfo.ParameterNameMaxLength, 16));
-            if (!dsInfo.ParameterNamePatternRegex.IsMatch(name))
-                throw new InvalidOperationException($"Generated parameter name '{name}' is invalid.");
-        }
-
+        name ??= GenerateParameterName();
         var parameter = _context.CreateDbParameter(name, type, value);
         _parameters.Add(parameter);
         return parameter;
     }
 
+    private string GenerateParameterName()
+    {
+        var dsInfo = _context.DataSourceInfo;
+        return $"param{Guid.NewGuid():N}".Substring(0, Math.Min(dsInfo.ParameterNameMaxLength, 8));
+    }
+
+    private DbCommand PrepareCommand(DbConnection conn)
+    {
+        var cmd = conn.CreateCommand();
+        cmd.CommandText = Query.ToString();
+        if (_parameters.Count > 0)
+            cmd.Parameters.AddRange(_parameters.ToArray());
+        return cmd;
+    }
+
+    private CommandBehavior DetermineCommandBehavior()
+    {
+        var behavior = CommandBehavior.SequentialAccess | CommandBehavior.SingleResult;
+        if (!(_context is TransactionContext))
+            behavior |= CommandBehavior.CloseConnection;
+        return behavior;
+    }
+
+    private void Cleanup(DbCommand cmd, DbConnection conn)
+    {
+        ClearCommand(cmd);
+        if (!(_context is TransactionContext))
+            conn.Dispose();
+    }
+
+    private void ClearCommand(DbCommand cmd)
+    {
+        cmd?.Parameters?.Clear();
+    }
+
     public async Task<DbDataReader> ExecuteReaderAsync()
     {
         var conn = _context.GetConnection(ExecutionType.Read);
-  \
+        DbCommand cmd = null;
         try
         {
-           var cmd = conn.CreateCommand();
-            cmd.CommandText = Query.ToString();
-
-            if (_parameters.Count > 0)
-                cmd.Parameters.AddRange(_parameters.ToArray());
-
-            var behavior = CommandBehavior.SequentialAccess | CommandBehavior.SingleResult;
-            if (!(_context is TransactionContext))
-                behavior |= CommandBehavior.CloseConnection;
-
-            return await cmd.ExecuteReaderAsync(behavior);
+            cmd = PrepareCommand(conn);
+            var behavior = DetermineCommandBehavior();
+            var reader = await cmd.ExecuteReaderAsync(behavior);
+            ClearCommand(cmd); // Ensure parameters are cleared after execution
+            return reader;
         }
         catch
         {
-            CloseConnection(conn);
+            Cleanup(cmd, conn);
             throw;
         }
     }
 
     public async Task<T?> ExecuteScalarAsync<T>()
     {
-        await using var reader = await ExecuteReaderAsync();
-        if (await reader.ReadAsync())
+        var conn = _context.GetConnection(ExecutionType.Read);
+        DbCommand cmd = null;
+        try
         {
-            if (await reader.IsDBNullAsync(0))
-                return default;
-            
-            var value = await reader.GetFieldValueAsync<object>(0);
-            return value is T typedValue ? typedValue : (T)Convert.ChangeType(value, typeof(T));
+            cmd = PrepareCommand(conn);
+            var result = await cmd.ExecuteScalarAsync();
+            return result is T value ? value : default;
         }
-        return default;
+        finally
+        {
+            Cleanup(cmd, conn);
+        }
     }
 
     public async Task<int> ExecuteNonQueryAsync()
     {
         var conn = _context.GetConnection(ExecutionType.Write);
-    
+        DbCommand cmd = null;
         try
         {
-           var cmd = conn.CreateCommand();
-            cmd.CommandText = Query.ToString();
-
-            if (_parameters.Count > 0)
-                cmd.Parameters.AddRange(_parameters.ToArray());
-
-            return await cmd.ExecuteNonQueryAsync();
+            cmd = PrepareCommand(conn);
+            var result = await cmd.ExecuteNonQueryAsync();
+            return result;
         }
-       
         finally
         {
-            CloseConnection(conn);
+            Cleanup(cmd, conn);
         }
     }
 
-    private void CloseConnection(DbConnection conn)
+    private T MapReaderToObject<T>(DbDataReader reader) where T : new()
     {
-        if (_context is TransactionContext)
-            return;
+        var obj = new T();
+        var tableInfo = TypeMapRegistry.GetTableInfo<T>();
 
-        switch (_context.ConnectionMode)
+        foreach (var column in tableInfo.Columns.Values)
         {
-            case DbMode.Standard:
-            case DbMode.SqlExpressUserMode:
-                conn.Dispose();
-                break;
-            default:
-                if (conn != _context.Connection)
-                {
-                    conn.Dispose();
-                }
-                break;
+            var value = reader[column.Name];
+            if (value != DBNull.Value)
+            {
+                column.PropertyInfo.SetValue(obj, value);
+            }
         }
+
+        return obj;
+    }
+
+    public async Task<T?> FetchSingleAsync<T>() where T : new()
+    {
+        await using var reader = await ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapReaderToObject<T>(reader) : default;
+    }
+
+    public async Task<List<T>> FetchListAsync<T>() where T : new()
+    {
+        var list = new List<T>();
+        await using var reader = await ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            var item = MapReaderToObject<T>(reader);
+            list.Add(item);
+        }
+
+        return list;
     }
 }

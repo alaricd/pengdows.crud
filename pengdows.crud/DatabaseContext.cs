@@ -21,7 +21,10 @@ public class DatabaseContext : DbContext
             Interlocked.Increment(ref _connectionCount);
             ConnectionString = csb.ConnectionString;
             DataSourceInfo = new DataSourceInformation(conn);
-            if (mode != DbMode.Standard) Connection = conn;
+            if (mode != DbMode.Standard)
+            {
+                Connection = conn;
+            }
         }
         finally
         {
@@ -33,32 +36,13 @@ public class DatabaseContext : DbContext
         }
     }
 
-    public SqlContainer CreateSqlContainer()
-    {
-        return new SqlContainer(this);
-    }
+
 
     public override TransactionContext BeginTransaction()
     {
         return new TransactionContext(this);
     }
 
-    public void ApplyIndexedViewSettings(DbConnection connection)
-    {
-        if (IsSqlServer)
-        {
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"
-                SET ANSI_NULLS ON;
-                SET ANSI_PADDING ON;
-                SET ANSI_WARNINGS ON;
-                SET ARITHABORT ON;
-                SET CONCAT_NULL_YIELDS_NULL ON;
-                SET QUOTED_IDENTIFIER ON;
-                SET NUMERIC_ROUNDABORT OFF;";
-            cmd.ExecuteNonQuery();
-        }
-    }
 
 
     private DbConnection GetStandardConnection()
@@ -76,7 +60,10 @@ public class DatabaseContext : DbContext
 
     private DbConnection GetSqlCeConnection(ExecutionType type)
     {
-        if (ExecutionType.Read == type) return GetStandardConnection();
+        if (ExecutionType.Read == type)
+        {
+            return GetStandardConnection();
+        }
 
         return Connection;
     }
@@ -103,4 +90,5 @@ public class DatabaseContext : DbContext
                 throw new InvalidOperationException("Invalid connection mode.");
         }
     }
+
 }
