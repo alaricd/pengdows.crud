@@ -13,4 +13,5 @@ public interface IDataSourceInformation
     string DatabaseProductName { get; }
     string DatabaseProductVersion { get; }
     string SchemaSeparator { get; }
+    bool PrepareStatements { get; }
 }

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace pengdows.crud;
 
-public class DataSourceInformation:IDataSourceInformation
+public class DataSourceInformation : IDataSourceInformation
 {
     public DataSourceInformation(DbConnection connection)
     {
@@ -17,6 +17,23 @@ public class DataSourceInformation:IDataSourceInformation
         DatabaseProductName = metaData.Rows[0]["DataSourceProductName"].ToString() ?? "Unknown";
         DatabaseProductVersion = metaData.Rows[0]["DataSourceProductVersion"].ToString() ?? "Unknown";
         SchemaSeparator = metaData.Rows[0]["SchemaSeparator"]?.ToString() ?? ".";
+
+        PrepareStatements = TestPrepareCommand(connection);
+    }
+
+    private bool TestPrepareCommand(DbConnection conn)
+    {
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT 1 WHERE 1=1";
+            cmd.Prepare();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public string QuotePrefix { get; }
@@ -28,4 +45,5 @@ public class DataSourceInformation:IDataSourceInformation
     public string DatabaseProductName { get; }
     public string DatabaseProductVersion { get; }
     public string SchemaSeparator { get; }
+    public bool PrepareStatements { get; set; }
 }

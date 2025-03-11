@@ -13,5 +13,6 @@ public interface IDatabaseContext : IDisposable
     DbMode ConnectionMode { get;   }
     ITypeMapRegistry TypeMapRegistry { get;  }
     IDataSourceInformation DataSourceInfo { get; }
+    string MissingSqlSettings { get; }
 }
 

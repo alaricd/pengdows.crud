@@ -1,4 +1,4 @@
-namespace pengdows.crud;
+namespace pengdows.crud.attributes;
 
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class TableAttribute : Attribute

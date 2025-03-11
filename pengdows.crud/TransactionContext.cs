@@ -11,7 +11,16 @@ public class TransactionContext :  ITransactionContext
      private bool _committed = false;
     private long _disposed = 0;
     private readonly IDatabaseContext _context;
-
+    private bool _rolledBack = false;
+    private bool _isCompleted = false;
+    
+    private bool IsCompleted {
+        get { 
+            _isCompleted |= _committed || _rolledBack;
+            return _isCompleted;
+        }
+        
+    }
     public TransactionContext(IDatabaseContext context)
     {
         _context = context;
@@ -29,6 +38,10 @@ public class TransactionContext :  ITransactionContext
 
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
+        if (IsCompleted)
+        {
+            throw new Exception($"Cannot create a sql container because this transaction is already completed.");
+        }
         return new SqlContainer(this, _context.TypeMapRegistry, query);
     }
 
@@ -54,26 +67,36 @@ public class TransactionContext :  ITransactionContext
 
     public IDataSourceInformation DataSourceInfo => _context.DataSourceInfo;
 
+    public string MissingSqlSettings => _context.MissingSqlSettings;
+
     public void Commit()
     {
-        ThrowIfDisposed();
-        if (_committed) return;
-
-        _transaction.Commit();
-        _committed = true;
+        try
+        {
+            _transaction.Commit();
+            _committed = true;
+        }
+        finally
+        {
+            _isCompleted = true;
+            _connection.Close();
+        }
     }
 
     public void Rollback()
     {
-        ThrowIfDisposed();
-        if (_committed) return;
-
-        _transaction.Rollback();
-        _transaction.Dispose();
-       
-        
-        _committed = true;
+        try
+        {
+            _transaction.Rollback();
+            _rolledBack = true;
+        }
+        finally
+        {
+            _isCompleted = true;
+            _connection.Close();
+        }
     }
+
 
     private void ThrowIfDisposed()
     {

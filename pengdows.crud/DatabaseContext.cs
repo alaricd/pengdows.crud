@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using System.Text;
@@ -6,41 +7,48 @@ namespace pengdows.crud;
 
 public class DatabaseContext : IDatabaseContext
 {
-  private int _disposeCount;
     private int _connectionCount;
-    private bool IsSqlServer;
-    private readonly HashSet<string> MissingSqlSettings = new();
+    private bool _isSqlServer;
+    private string _missingSqlSettings;
     private DataSourceInformation _dataSourceInfo;
+    private DbConnection? _connection;
+    private readonly DbProviderFactory _factory;
+    private readonly DbMode _connectionMode;
+    private readonly ITypeMapRegistry _typeMapRegistry;
 
-    private string ConnectionString { get;  set; }
-    public DbMode ConnectionMode { get; private set; }
-    public ITypeMapRegistry TypeMapRegistry { get; }
+    private string ConnectionString { get; set; }
 
-   
-    public DbConnection Connection { get; private set; }
+    public DbMode ConnectionMode => _connectionMode;
+
+    public ITypeMapRegistry TypeMapRegistry => _typeMapRegistry;
+
+
+    private DbConnection Connection => _connection ??
+                                       throw new ObjectDisposedException(
+                                           "attempt to use single connection from the wrong mode.");
 
     public IDataSourceInformation DataSourceInfo => _dataSourceInfo;
 
-    private DbProviderFactory Factory { get; set; }
 
-
+    public string MissingSqlSettings => (_missingSqlSettings ?? "");
 
     private void CheckForSqlServerSettings(DbConnection conn)
     {
-        IsSqlServer = _dataSourceInfo.DatabaseProductName.StartsWith("Microsoft SQL Server", StringComparison.OrdinalIgnoreCase)
-                      && !_dataSourceInfo.DatabaseProductName.Contains("Compact", StringComparison.OrdinalIgnoreCase);
+        _isSqlServer =
+            _dataSourceInfo.DatabaseProductName.StartsWith("Microsoft SQL Server", StringComparison.OrdinalIgnoreCase)
+            && !_dataSourceInfo.DatabaseProductName.Contains("Compact", StringComparison.OrdinalIgnoreCase);
 
-        if (!IsSqlServer) return;
+        if (!_isSqlServer) return;
 
         var settings = new Dictionary<string, string>
         {
-            {"ANSI_NULLS", "ON"},
-            {"ANSI_PADDING", "ON"},
-            {"ANSI_WARNINGS", "ON"},
-            {"ARITHABORT", "ON"},
-            {"CONCAT_NULL_YIELDS_NULL", "ON"},
-            {"QUOTED_IDENTIFIER", "ON"},
-            {"NUMERIC_ROUNDABORT", "OFF"}
+            { "ANSI_NULLS", "ON" },
+            { "ANSI_PADDING", "ON" },
+            { "ANSI_WARNINGS", "ON" },
+            { "ARITHABORT", "ON" },
+            { "CONCAT_NULL_YIELDS_NULL", "ON" },
+            { "QUOTED_IDENTIFIER", "ON" },
+            { "NUMERIC_ROUNDABORT", "OFF" }
         };
 
         using var cmd = conn.CreateCommand();
@@ -55,65 +63,84 @@ public class DatabaseContext : IDatabaseContext
             currentSettings[reader.GetString(0)] = reader.GetString(1);
         }
 
+        var sb = new StringBuilder();
+
         foreach (var (setting, expectedValue) in settings)
         {
-            if (!currentSettings.TryGetValue(setting, out var currentValue) || !currentValue.Equals(expectedValue, StringComparison.OrdinalIgnoreCase))
+            if (!currentSettings.TryGetValue(setting, out var currentValue) ||
+                !currentValue.Equals(expectedValue, StringComparison.OrdinalIgnoreCase))
             {
-                MissingSqlSettings.Add(setting);
+                sb.Append(setting);
+                sb.Append(" ");
+                sb.Append(expectedValue);
+                sb.AppendLine(";");
+                // _missingSqlSettings.AddOrUpdate(setting, expectedValue, (s, s1) => expectedValue);
             }
+        }
+
+        if (sb.Length > 0)
+        {
+            sb.Insert(0, "SET NOCOUNT ON;\n");
+            sb.AppendLine("SET NOCOUNT OFF;");
+            _missingSqlSettings = sb.ToString();
         }
     }
 
-    private void ApplyIndexedViewSettings(DbConnection conn)
+    // private void ApplyIndexedViewSettings(DbConnection conn)
+    // {
+    //     if (_missingSqlSettings.Count == 0 || !_isSqlServer) return;
+    //
+    //     using var cmd = conn.CreateCommand();
+    //     var setCommands = _missingSqlSettings.Select(kvp => $"SET {kvp.Key} {kvp.Value}");
+    //     cmd.CommandText = string.Join("; ", setCommands);
+    //     cmd.ExecuteNonQuery();
+    // }
+    public DatabaseContext(string connectionString, string providerName, ITypeMapRegistry typeMapRegistry,
+        DbMode mode = DbMode.Standard)
     {
-        if (MissingSqlSettings.Count == 0 || !IsSqlServer) return;
-
-        using var cmd = conn.CreateCommand();
-        var setCommands = MissingSqlSettings.Select(s => $"{s} {(s == "NUMERIC_ROUNDABORT" ? "OFF" : "ON")}");
-        cmd.CommandText = string.Join("; ", setCommands);
-        cmd.ExecuteNonQuery();
+        _typeMapRegistry = typeMapRegistry;
+        _connectionMode = mode;
+        _factory = DbProviderFactories.GetFactory(providerName);
+        InitializeInternals(connectionString, mode);
     }
-    public DatabaseContext(string connectionString, string providerName, ITypeMapRegistry typeMapRegistry, DbMode mode = DbMode.Standard) 
+
+    private void InitializeInternals(string connectionString, DbMode mode)
     {
-        TypeMapRegistry = typeMapRegistry;
-        this.ConnectionMode = mode;
-        this.Factory = DbProviderFactories.GetFactory(providerName);
-        var csb = this. Factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
         DbConnection conn = null;
         try
         {
+            var csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
+            conn = _factory.CreateConnection();
             csb.ConnectionString = connectionString;
             conn.ConnectionString = csb.ConnectionString;
-
+            AddStateChangeHandler(conn);
             conn.Open();
             _dataSourceInfo = new DataSourceInformation(conn);
             CheckForSqlServerSettings(conn);
-            ApplyIndexedViewSettings(conn);
-            Interlocked.Increment(ref _connectionCount);
             ConnectionString = csb.ConnectionString;
             if (mode != DbMode.Standard)
             {
-                Connection = conn;
+                //ApplyIndexedViewSettings(conn);
+
+                _connection = conn;
             }
         }
         finally
         {
             if (mode != DbMode.Standard)
             {
-                Interlocked.Decrement(ref _connectionCount);
                 conn?.Dispose();
             }
         }
     }
-
 
     public string WrapObjectName(string name)
     {
         if (string.IsNullOrEmpty(name))
         {
             return string.Empty;
-        }    
-        
+        }
+
         var ss = name.Split(_dataSourceInfo.SchemaSeparator);
         var qp = _dataSourceInfo.QuotePrefix;
         var qs = _dataSourceInfo.QuoteSuffix;
@@ -129,6 +156,7 @@ public class DatabaseContext : IDatabaseContext
             {
                 sb.Append(_dataSourceInfo.SchemaSeparator);
             }
+
             sb.Append(qp);
             sb.Append(s);
             sb.Append(qs);
@@ -137,7 +165,7 @@ public class DatabaseContext : IDatabaseContext
         return sb.ToString();
     }
 
-    public  TransactionContext BeginTransaction()
+    public TransactionContext BeginTransaction()
     {
         return new TransactionContext(this);
     }
@@ -145,10 +173,10 @@ public class DatabaseContext : IDatabaseContext
 
     private DbConnection GetStandardConnection()
     {
-        var connection = Factory.CreateConnection();
-        connection.ConnectionString = ConnectionString;
-        AddStateChangeHandler(connection);
-        return connection;
+        var conn = _factory.CreateConnection();
+        conn.ConnectionString = ConnectionString;
+        AddStateChangeHandler(conn);
+        return conn;
     }
 
     private void AddStateChangeHandler(DbConnection connection)
@@ -195,14 +223,14 @@ public class DatabaseContext : IDatabaseContext
 
     public DbParameter CreateDbParameter<T>(string name, DbType type, T value)
     {
-        var p =  Factory.CreateParameter()?? throw new InvalidOperationException("Failed to create parameter.");
+        var p = _factory.CreateParameter() ?? throw new InvalidOperationException("Failed to create parameter.");
         p.ParameterName = name;
         p.DbType = type;
         p.Value = value;
         return p;
     }
 
-    public  DbConnection GetConnection(ExecutionType type = ExecutionType.Read)
+    public DbConnection GetConnection(ExecutionType type = ExecutionType.Read)
     {
         switch (ConnectionMode)
         {
@@ -226,6 +254,14 @@ public class DatabaseContext : IDatabaseContext
 
     private void Dispose(bool disposing)
     {
-        
+        if (disposing)
+        {
+            _connection?.Dispose();
+        }
+    }
+
+    ~DatabaseContext()
+    {
+        Dispose(false);
     }
 }

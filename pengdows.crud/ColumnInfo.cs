@@ -4,7 +4,7 @@ namespace pengdows.crud;
 
 public class ColumnInfo
 {
-    public string Name { get; set; }
-    public PropertyInfo PropertyInfo { get; set; }
-    public bool IsId { get; set; } = false;
+    public string Name { get; init; }
+    public PropertyInfo PropertyInfo { get; init; }
+    public bool IsId { get; init; } = false;
 }

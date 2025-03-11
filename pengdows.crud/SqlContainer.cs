@@ -41,16 +41,30 @@ public class SqlContainer : ISqlContainer
 
     private DbCommand PrepareCommand(DbConnection conn)
     {
+        OpenConnection(conn);
         var cmd = conn.CreateCommand();
-        cmd.CommandText = Query.ToString();
+        cmd.CommandText = _context.MissingSqlSettings + Query;
         if (_parameters.Count > 0)
             cmd.Parameters.AddRange(_parameters.ToArray());
+        if (_context.DataSourceInfo.PrepareStatements)
+        {
+            cmd.Prepare();
+        }
         return cmd;
+    }
+
+    private void OpenConnection(DbConnection conn)
+    {
+        if (conn.State != ConnectionState.Open)
+        {
+            conn.Open();
+        }
     }
 
     private void Cleanup(DbCommand cmd, DbConnection conn)
     {
-        cmd.Parameters.Clear();
+        cmd?.Parameters?.Clear();
+        cmd?.Dispose();
         if (!(_context is TransactionContext))
             conn.Dispose();
     }
@@ -104,6 +118,7 @@ public class SqlContainer : ISqlContainer
     private async Task<TResult> ExecuteAsync<TResult>(Func<DbCommand, Task<TResult>> action, ExecutionType executionType)
     {
         var conn = _context.GetConnection(executionType);
+        
         var cmd = PrepareCommand(conn);
         try
         {
