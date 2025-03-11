@@ -1,76 +1,63 @@
+using System;
 using System.Data;
 using System.Data.Common;
 
 namespace pengdows.crud;
 
-public class TransactionContext : DbContext
+public class TransactionContext :  ITransactionContext
 {
     private readonly DbConnection _connection;
     private readonly DbTransaction _transaction;
-    private readonly DataSourceInformation _dataSourceInfo;
-    private bool _committed;
-    private bool _disposed;
+     private bool _committed = false;
+    private long _disposed = 0;
+    private readonly IDatabaseContext _context;
 
-    public TransactionContext(DatabaseContext context)
+    public TransactionContext(IDatabaseContext context)
     {
-        _connection = context.GetConnection(ExecutionType.Write);
-        _dataSourceInfo = context.DataSourceInfo;
-        ConnectionMode = context.ConnectionMode;
-        if (_connection.State != ConnectionState.Open)
-        {
-            _connection.Open();
-        }
-
+        _context = context;
+        _connection = _context.GetConnection(ExecutionType.Write);
+        EnsureConnectionIsOpen();
         _transaction = _connection.BeginTransaction();
     }
 
-    public override TransactionContext BeginTransaction() => this;
-      public DbMode ConnectionMode;
-    public DbConnection Connection;
-    public DataSourceInformation DataSourceInfo;
-
-    public SqlContainer CreateSqlContainer() => new(this);
-
-    public override DbConnection GetConnection(ExecutionType type) => _connection;
-
-
-    public void AddStateChangeHandler(DbConnection connection)
+    private void EnsureConnectionIsOpen()
     {
-        connection.StateChange += (sender, args) =>
-        {
-            if (args.CurrentState == ConnectionState.Closed)
-            {
-                Console.WriteLine("Transaction connection closed.");
-            }
-        };
+        if (_connection.State != ConnectionState.Open)
+            _connection.Open();
     }
 
+
+    public ISqlContainer CreateSqlContainer(string? query = null)
+    {
+        return new SqlContainer(this, _context.TypeMapRegistry, query);
+    }
+
+    public DbParameter CreateDbParameter<T>(string name, DbType type, T value)
+    {
+       return _context.CreateDbParameter(name, type, value);
+    }
+
+    public DbConnection GetConnection(ExecutionType type) => _connection;
     public string WrapObjectName(string name)
     {
-        if (string.IsNullOrEmpty(name))
-        {
-            return name;
-        }
-
-        var parts = name.Split(DataSourceInfo.SchemaSeparator);
-        for (var i = 0; i < parts.Length; i++)
-        {
-            parts[i] = DataSourceInfo.QuotePrefix + parts[i] + DataSourceInfo.QuoteSuffix;
-        }
-        return string.Join(DataSourceInfo.SchemaSeparator, parts);
+        return _context.WrapObjectName(name);
     }
+
+    public TransactionContext BeginTransaction()
+    {
+        throw new NotImplementedException("TransactionContext cannot start a new transaction, nested transactions are not supported.");
+    }
+
+    public DbMode ConnectionMode => DbMode.SingleConnection;
+
+    public ITypeMapRegistry TypeMapRegistry => _context.TypeMapRegistry;
+
+    public IDataSourceInformation DataSourceInfo => _context.DataSourceInfo;
 
     public void Commit()
     {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(TransactionContext));
-        }
-
-        if (_committed)
-        {
-            return;
-        }
+        ThrowIfDisposed();
+        if (_committed) return;
 
         _transaction.Commit();
         _committed = true;
@@ -78,27 +65,46 @@ public class TransactionContext : DbContext
 
     public void Rollback()
     {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(TransactionContext));
-        }
-
-        if (_committed)
-        {
-            return;
-        }
+        ThrowIfDisposed();
+        if (_committed) return;
 
         _transaction.Rollback();
+        _transaction.Dispose();
+       
+        
         _committed = true;
     }
 
-    protected  void Dispose(bool disposing)
+    private void ThrowIfDisposed()
     {
-       
+        if (Interlocked.Read(ref _disposed)==1)
+            throw new ObjectDisposedException(nameof(TransactionContext));
+    }
+
+    private void Dispose(bool disposing)
+    {
+        if (Interlocked.Increment(ref _disposed) == 1)
+        {
+            if (!_committed)
+            {
+                Rollback();
+            }
+            if(_context.ConnectionMode == DbMode.Standard){
+                _connection.Dispose();
+            }
         
-       base.Dispose(disposing, () =>
-       {
-           this.Rollback();
-       });
+            if (disposing)
+            {
+                GC.SuppressFinalize(this);
+            }
+        }
+
+    
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+     
     }
 }

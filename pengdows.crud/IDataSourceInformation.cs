@@ -10,4 +10,7 @@ public interface IDataSourceInformation
     string ParameterMarker { get; }
     int ParameterNameMaxLength { get; }
     Regex ParameterNamePatternRegex { get; }
+    string DatabaseProductName { get; }
+    string DatabaseProductVersion { get; }
+    string SchemaSeparator { get; }
 }

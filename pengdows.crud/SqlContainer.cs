@@ -9,18 +9,21 @@ namespace pengdows.crud;
 
 public class SqlContainer : ISqlContainer
 {
-    private readonly IDbContext _context;
+    private readonly IDatabaseContext _context;
+    private readonly ITypeMapRegistry _typeMapRegistry;
     private readonly List<DbParameter> _parameters = new();
 
-    private static readonly ConcurrentDictionary<Type, Dictionary<int, Action<object, object>>> _setterCache = new();
+    // Cache for compiled property setters
+    private static readonly ConcurrentDictionary<PropertyInfo, Action<object, object?>> _propertySetters = new();
 
-    public SqlContainer(IDbContext context, string query = "")
+    public SqlContainer(IDatabaseContext context, ITypeMapRegistry typeMapRegistry, string? query = "")
     {
         _context = context;
+        _typeMapRegistry = typeMapRegistry;
         Query = new StringBuilder(query);
     }
 
-    public StringBuilder Query { get; } = new();
+    public StringBuilder Query { get; }
 
     public DbParameter AppendParameter<T>(string? name, DbType type, T value)
     {
@@ -45,14 +48,6 @@ public class SqlContainer : ISqlContainer
         return cmd;
     }
 
-    private CommandBehavior DetermineCommandBehavior()
-    {
-        var behavior = CommandBehavior.SequentialAccess | CommandBehavior.SingleResult;
-        if (!(_context is TransactionContext))
-            behavior |= CommandBehavior.CloseConnection;
-        return behavior;
-    }
-
     private void Cleanup(DbCommand cmd, DbConnection conn)
     {
         cmd.Parameters.Clear();
@@ -60,93 +55,68 @@ public class SqlContainer : ISqlContainer
             conn.Dispose();
     }
 
-    private Dictionary<int, Action<object, object>> BuildPropertySetterMap<T>(DbDataReader reader, TableInfo tableInfo)
+    private Action<object, object?> GetOrCreateSetter(PropertyInfo prop)
     {
-        var setters = new Dictionary<int, Action<object, object>>();
-
-        foreach (var column in tableInfo.Columns.Values)
+        return _propertySetters.GetOrAdd(prop, p =>
         {
-            var ordinal = reader.GetOrdinal(column.Name);
-            if (ordinal >= 0)
-            {
-                var setter = CreateSetter(column.PropertyInfo);
-                if (setter != null)
-                    setters[ordinal] = setter;
-            }
-        }
+            var objParam = Expression.Parameter(typeof(object));
+            var valueParam = Expression.Parameter(typeof(object));
 
-        return setters;
-    }
+            var castObj = Expression.Convert(objParam, p.DeclaringType!);
+            var castValue = Expression.Convert(valueParam, p.PropertyType);
 
-    private Action<object, object>? CreateSetter(PropertyInfo propInfo)
-    {
-        var instance = Expression.Parameter(typeof(object), "instance");
-        var value = Expression.Parameter(typeof(object), "value");
+            var propertyAccess = Expression.Property(castObj, p);
+            var assignment = Expression.Assign(propertyAccess, castValue);
 
-        var body = Expression.Assign(
-            Expression.Property(Expression.Convert(instance, propInfo.DeclaringType!),
-                                propInfo),
-            Expression.Convert(value, propInfo.PropertyType));
-
-        return Expression.Lambda<Action<object, object>>(body, instance, value).Compile();
+            var lambda = Expression.Lambda<Action<object, object?>>(assignment, objParam, valueParam);
+            return lambda.Compile();
+        });
     }
 
     private T MapReaderToObject<T>(DbDataReader reader) where T : new()
     {
         var obj = new T();
-        var type = typeof(T);
-
-        var setters = _setterCache.GetOrAdd(type, _ =>
-        {
-            var tableInfo = TypeMapRegistry.GetTableInfo<T>();
-            return BuildPropertySetterMap(reader, tableInfo);
-        });
+        var tableInfo = _typeMapRegistry.GetTableInfo<T>();
 
         for (int i = 0; i < reader.FieldCount; i++)
         {
-            if (reader.IsDBNull(i)) continue;
-            if (setters.TryGetValue(i, out var setter))
+            var colName = reader.GetName(i);
+            if (tableInfo.Columns.TryGetValue(colName, out var column))
             {
                 var value = reader.GetValue(i);
-                setter(obj, value);
+                if (value != DBNull.Value)
+                {
+                    var setter = GetOrCreateSetter(column.PropertyInfo);
+                    setter(obj, value);
+                }
             }
         }
 
         return obj;
     }
 
-    private async Task<T> ExecuteAsync<T>(Func<DbCommand, Task<T>> action, ExecutionType executionType)
+    public async Task<int> ExecuteNonQueryAsync()
+        => await ExecuteAsync(cmd => cmd.ExecuteNonQueryAsync(), ExecutionType.Write);
+
+    public async Task<T?> ExecuteScalarAsync<T>()
+        => await ExecuteAsync(async cmd => (T?)await cmd.ExecuteScalarAsync(), ExecutionType.Read);
+
+    private async Task<TResult> ExecuteAsync<TResult>(Func<DbCommand, Task<TResult>> action, ExecutionType executionType)
     {
         var conn = _context.GetConnection(executionType);
-        DbCommand? cmd = null;
+        var cmd = PrepareCommand(conn);
         try
         {
-            cmd = PrepareCommand(conn);
             return await action(cmd).ConfigureAwait(false);
         }
         finally
         {
-            if (cmd != null)
-                Cleanup(cmd, conn);
+            Cleanup(cmd, conn);
         }
     }
 
-    public async Task<DbDataReader> ExecuteReaderAsync() =>
-        await ExecuteAsync(async cmd =>
-        {
-            var behavior = DetermineCommandBehavior();
-            return await cmd.ExecuteReaderAsync(behavior).ConfigureAwait(false);
-        }, ExecutionType.Read);
-
-    public async Task<T?> ExecuteScalarAsync<T>() =>
-        await ExecuteAsync(async cmd =>
-        {
-            var result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
-            return result is T value ? value : default;
-        }, ExecutionType.Read);
-
-    public async Task<int> ExecuteNonQueryAsync() =>
-        await ExecuteAsync(cmd => cmd.ExecuteNonQueryAsync(), ExecutionType.Write);
+    public async Task<DbDataReader> ExecuteReaderAsync()
+        => await ExecuteAsync(cmd => cmd.ExecuteReaderAsync(), ExecutionType.Read);
 
     public async Task<T?> LoadSingleAsync<T>() where T : new()
     {
@@ -160,7 +130,9 @@ public class SqlContainer : ISqlContainer
         await using var reader = await ExecuteReaderAsync().ConfigureAwait(false);
 
         while (await reader.ReadAsync().ConfigureAwait(false))
+        {
             list.Add(MapReaderToObject<T>(reader));
+        }
 
         return list;
     }

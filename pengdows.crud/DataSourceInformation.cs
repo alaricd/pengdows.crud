@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace pengdows.crud;
 
-public class DataSourceInformation
+public class DataSourceInformation:IDataSourceInformation
 {
     public DataSourceInformation(DbConnection connection)
     {
