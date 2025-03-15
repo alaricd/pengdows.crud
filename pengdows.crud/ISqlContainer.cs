@@ -11,6 +11,5 @@ public interface ISqlContainer
     Task<DbDataReader> ExecuteReaderAsync();
     Task<T?> ExecuteScalarAsync<T>();
     Task<int> ExecuteNonQueryAsync();
-    Task<T?> LoadSingleAsync<T>() where T : new();
-    Task<List<T>> LoadListAsync<T>() where T : new();
+
 }
