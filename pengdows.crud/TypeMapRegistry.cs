@@ -4,11 +4,11 @@ using pengdows.crud.attributes;
 
 namespace pengdows.crud;
 
-public  class TypeMapRegistry:ITypeMapRegistry 
+public class TypeMapRegistry : ITypeMapRegistry
 {
-    private  readonly ConcurrentDictionary<Type, TableInfo> TypeMap = new();
+    private readonly ConcurrentDictionary<Type, TableInfo> TypeMap = new();
 
-    public  TableInfo GetTableInfo<T>()
+    public TableInfo GetTableInfo<T>()
     {
         var type = typeof(T);
 
@@ -16,22 +16,23 @@ public  class TypeMapRegistry:ITypeMapRegistry
         {
             tableInfo = new TableInfo
             {
-                Name = type.GetCustomAttribute<TableAttribute>()?.Name ?? throw new InvalidOperationException($"Type {type.Name} does not have a TableAttribute."),
-                Schema = type.GetCustomAttribute<TableAttribute>()?.Schema ?? "dbo"
+                Name = type.GetCustomAttribute<TableAttribute>()?.Name ??
+                       throw new InvalidOperationException($"Type {type.Name} does not have a TableAttribute."),
+                Schema = type.GetCustomAttribute<TableAttribute>()?.Schema ?? ""
             };
 
             foreach (var prop in type.GetProperties())
             {
                 var colAttr = prop.GetCustomAttribute<ColumnAttribute>();
                 if (colAttr != null)
-                {
-                    tableInfo.Columns[prop.Name] = new ColumnInfo
+                    tableInfo.Columns[colAttr.Name] = new ColumnInfo
                     {
                         Name = colAttr.Name,
                         PropertyInfo = prop,
+                        DbType = colAttr.Type,
+                        IsNonUpdateable = prop.GetCustomAttribute<NonUpdateableAttribute>() != null,
                         IsId = prop.GetCustomAttribute<IdAttribute>() != null
                     };
-                }
             }
 
             TypeMap[type] = tableInfo;

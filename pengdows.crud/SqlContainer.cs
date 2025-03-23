@@ -7,14 +7,18 @@ namespace pengdows.crud;
 public class SqlContainer : ISqlContainer
 {
     private readonly IDatabaseContext _context;
-    private readonly ITypeMapRegistry _typeMapRegistry;
     private readonly List<DbParameter> _parameters = new();
 
- 
-    public SqlContainer(IDatabaseContext context, ITypeMapRegistry typeMapRegistry, string? query = "")
+
+    public SqlContainer(IDatabaseContext context)
     {
         _context = context;
-        _typeMapRegistry = typeMapRegistry;
+        Query = new StringBuilder("");
+    }
+
+    public SqlContainer(IDatabaseContext context, string? query = "")
+    {
+        _context = context;
         Query = new StringBuilder(query);
     }
 
@@ -22,17 +26,64 @@ public class SqlContainer : ISqlContainer
 
     public DbParameter AppendParameter<T>(string? name, DbType type, T value)
     {
-        name ??= GenerateParameterName();
+        name ??= _context.GenerateRandomName();
         var parameter = _context.CreateDbParameter(name, type, value);
         _parameters.Add(parameter);
         return parameter;
     }
 
-    private string GenerateParameterName()
+    public async Task<int> ExecuteNonQueryAsync()
     {
-        var dsInfo = _context.DataSourceInfo;
-        return $"param{Guid.NewGuid():N}".Substring(0, Math.Min(dsInfo.ParameterNameMaxLength, 8));
+        return await ExecuteAsync(cmd => cmd.ExecuteNonQueryAsync(), ExecutionType.Write);
     }
+
+    public async Task<T?> ExecuteScalarAsync<T>()
+    {
+      await using var reader = await ExecuteReaderAsync();
+      if (await reader.ReadAsync().ConfigureAwait(false))
+      {
+          if (!reader.IsDBNull(0))
+          {
+              return reader.GetFieldValue<T>(0);
+          }
+      }
+
+      throw new Exception("No rows returned");
+    }
+
+    public async Task<DbDataReader> ExecuteReaderAsync()
+    {
+        DbConnection conn;
+        DbCommand cmd = null;
+        bool closeConnection = true;
+        try
+        {
+            conn = _context.GetConnection(ExecutionType.Read);
+            var c = _context as DatabaseContext;
+            var behavior = (_context is TransactionContext || conn == c?.SingleConnection)
+                ? CommandBehavior.Default
+                : CommandBehavior.CloseConnection;
+            behavior |= CommandBehavior.SingleResult;
+            cmd = conn.CreateCommand();
+            cmd.CommandText = Query.ToString();
+            cmd.CommandType = CommandType.Text;
+            cmd.Parameters.AddRange(_parameters.ToArray());
+            OpenConnection(conn);
+            // if this is our single connection to the database, for a transaction
+            //or sqlce mode, or single connection mode, we will NOT close the connection.
+            // otherwise, we will have the connection set to autoclose so that we 
+            //close the underlying connection when the dbdatareader is closed;
+            return await cmd.ExecuteReaderAsync(behavior).ConfigureAwait(false);
+        }
+        finally
+        {
+            //no matter what we do NOT close the underlying connection
+            //or dispose it.
+            cmd?.Parameters.Clear();
+            //cmd?.Dispose();
+        } 
+    }
+
 
     private DbCommand PrepareCommand(DbConnection conn)
     {
@@ -45,6 +96,7 @@ public class SqlContainer : ISqlContainer
         {
             cmd.Prepare();
         }
+
         return cmd;
     }
 
@@ -56,24 +108,28 @@ public class SqlContainer : ISqlContainer
         }
     }
 
-    private void Cleanup(DbCommand cmd, DbConnection conn)
+    private void Cleanup(DbCommand cmd, DbConnection conn, ExecutionType executionType)
     {
         cmd?.Parameters?.Clear();
         cmd?.Dispose();
+        if (executionType == ExecutionType.Read)
+            //leave the connection open for reads until we dispose them.
+            return;
         if (!(_context is TransactionContext))
-            conn.Dispose();
+        {
+            var dbContext = _context as DatabaseContext;
+            if (dbContext?.SingleConnection != conn)
+            {
+                conn.Dispose();
+            }
+        }
     }
 
-    public async Task<int> ExecuteNonQueryAsync()
-        => await ExecuteAsync(cmd => cmd.ExecuteNonQueryAsync(), ExecutionType.Write);
-
-    public async Task<T?> ExecuteScalarAsync<T>()
-        => await ExecuteAsync(async cmd => (T?)await cmd.ExecuteScalarAsync(), ExecutionType.Read);
-
-    private async Task<TResult> ExecuteAsync<TResult>(Func<DbCommand, Task<TResult>> action, ExecutionType executionType)
+    private async Task<TResult> ExecuteAsync<TResult>(Func<DbCommand, Task<TResult>> action,
+        ExecutionType executionType)
     {
         var conn = _context.GetConnection(executionType);
-        
+
         var cmd = PrepareCommand(conn);
         try
         {
@@ -81,16 +137,13 @@ public class SqlContainer : ISqlContainer
         }
         finally
         {
-            Cleanup(cmd, conn);
+            Cleanup(cmd, conn, executionType);
         }
     }
 
-    public async Task<DbDataReader> ExecuteReaderAsync()
-        => await ExecuteAsync(cmd => cmd.ExecuteReaderAsync(), ExecutionType.Read);
-
     public void AppendParameters(List<DbParameter> list)
     {
-        if (list != null && list.Count > 0)
+        if (list is { Count: > 0 })
         {
             _parameters.AddRange(list);
         }

@@ -1,26 +1,18 @@
-using System;
 using System.Data;
 using System.Data.Common;
 
 namespace pengdows.crud;
 
-public class TransactionContext :  ITransactionContext
+public class TransactionContext : ITransactionContext
 {
     private readonly DbConnection _connection;
-    private readonly DbTransaction _transaction;
-     private bool _committed = false;
-    private long _disposed = 0;
     private readonly IDatabaseContext _context;
-    private bool _rolledBack = false;
-    private bool _isCompleted = false;
-    
-    private bool IsCompleted {
-        get { 
-            _isCompleted |= _committed || _rolledBack;
-            return _isCompleted;
-        }
-        
-    }
+    private readonly DbTransaction _transaction;
+    private bool _committed;
+    private long _disposed;
+    private bool _isCompleted;
+    private bool _rolledBack;
+
     public TransactionContext(IDatabaseContext context)
     {
         _context = context;
@@ -29,28 +21,33 @@ public class TransactionContext :  ITransactionContext
         _transaction = _connection.BeginTransaction();
     }
 
-    private void EnsureConnectionIsOpen()
+    private bool IsCompleted
     {
-        if (_connection.State != ConnectionState.Open)
-            _connection.Open();
+        get
+        {
+            _isCompleted |= _committed || _rolledBack;
+            return _isCompleted;
+        }
     }
 
 
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
         if (IsCompleted)
-        {
-            throw new Exception($"Cannot create a sql container because this transaction is already completed.");
-        }
-        return new SqlContainer(this, _context.TypeMapRegistry, query);
+            throw new Exception("Cannot create a sql container because this transaction is already completed.");
+        return new SqlContainer(this, query);
     }
 
     public DbParameter CreateDbParameter<T>(string name, DbType type, T value)
     {
-       return _context.CreateDbParameter(name, type, value);
+        return _context.CreateDbParameter(name, type, value);
     }
 
-    public DbConnection GetConnection(ExecutionType type) => _connection;
+    public DbConnection GetConnection(ExecutionType type)
+    {
+        return _connection;
+    }
+
     public string WrapObjectName(string name)
     {
         return _context.WrapObjectName(name);
@@ -58,7 +55,13 @@ public class TransactionContext :  ITransactionContext
 
     public TransactionContext BeginTransaction()
     {
-        throw new NotImplementedException("TransactionContext cannot start a new transaction, nested transactions are not supported.");
+        throw new NotImplementedException(
+            "TransactionContext cannot start a new transaction, nested transactions are not supported.");
+    }
+
+    public string GenerateRandomName(int length = 8)
+    {
+        return _context.GenerateRandomName(length);
     }
 
     public DbMode ConnectionMode => DbMode.SingleConnection;
@@ -97,10 +100,21 @@ public class TransactionContext :  ITransactionContext
         }
     }
 
+    public void Dispose()
+    {
+        Dispose(true);
+    }
+
+    private void EnsureConnectionIsOpen()
+    {
+        if (_connection.State != ConnectionState.Open)
+            _connection.Open();
+    }
+
 
     private void ThrowIfDisposed()
     {
-        if (Interlocked.Read(ref _disposed)==1)
+        if (Interlocked.Read(ref _disposed) == 1)
             throw new ObjectDisposedException(nameof(TransactionContext));
     }
 
@@ -108,26 +122,10 @@ public class TransactionContext :  ITransactionContext
     {
         if (Interlocked.Increment(ref _disposed) == 1)
         {
-            if (!_committed)
-            {
-                Rollback();
-            }
-            if(_context.ConnectionMode == DbMode.Standard){
-                _connection.Dispose();
-            }
-        
-            if (disposing)
-            {
-                GC.SuppressFinalize(this);
-            }
+            if (!_committed) Rollback();
+            if (_context.ConnectionMode == DbMode.Standard) _connection.Dispose();
+
+            if (disposing) GC.SuppressFinalize(this);
         }
-
-    
-    }
-
-    public void Dispose()
-    {
-        Dispose(true);
-     
     }
 }

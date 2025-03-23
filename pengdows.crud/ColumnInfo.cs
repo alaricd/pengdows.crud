@@ -10,4 +10,5 @@ public class ColumnInfo
     public bool IsId { get; init; } = false;
     public DbType DbType { get; set; }
     public bool IsVersion { get; set; }
+    public bool IsNonUpdateable { get; set; }
 }

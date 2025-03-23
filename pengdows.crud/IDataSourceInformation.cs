@@ -12,6 +12,6 @@ public interface IDataSourceInformation
     Regex ParameterNamePatternRegex { get; }
     string DatabaseProductName { get; }
     string DatabaseProductVersion { get; }
-    string SchemaSeparator { get; }
+    string CompositeIdentifierSeparator { get; }
     bool PrepareStatements { get; }
 }
