@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Reflection;
+using pengdows.crud.enums;
 
 namespace pengdows.crud;
 
@@ -19,5 +20,6 @@ public interface IEntityHelper<T, TID> where T : class, new()
     string MakeParameterName(DbParameter p);
     Action<object, object?> GetOrCreateSetter(PropertyInfo prop);
     T MapReaderToObject(DbDataReader reader);
-    String WrappedTableName { get; }
+    String WrappedWrappedTableName { get; }
+    public EnumParseFailureMode EnumParseBehavior { get; set; }
 }

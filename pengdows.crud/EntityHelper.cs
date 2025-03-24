@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
+using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using pengdows.crud.enums;
 
 namespace pengdows.crud;
 
@@ -14,18 +16,22 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     private readonly ColumnInfo? _idColumn;
     private readonly string _parameterMarker;
     private readonly TableInfo _tableInfo;
-    private readonly string _tableName;
     private readonly ITypeMapRegistry _typeMap;
     private readonly bool _usePositionalParameters;
 
     private readonly ColumnInfo? _versionColumn;
+    public String WrappedWrappedTableName { get; }
 
-    public EntityHelper(IDatabaseContext databaseContext) :
+    public EnumParseFailureMode EnumParseBehavior { get; set; } 
+    
+    public EntityHelper(IDatabaseContext databaseContext,
+        EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw) :
         this(databaseContext, databaseContext.TypeMapRegistry)
     {
     }
 
-    public EntityHelper(IDatabaseContext databaseContext, ITypeMapRegistry typeMap)
+    public EntityHelper(IDatabaseContext databaseContext, ITypeMapRegistry typeMap,
+        EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw)
     {
         _context = databaseContext;
         _typeMap = typeMap;
@@ -34,22 +40,16 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         _parameterMarker = _context.DataSourceInfo.ParameterMarker;
         _usePositionalParameters = _context.DataSourceInfo.ParameterMarker == "?";
 
-        _tableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
+        WrappedWrappedTableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
                          ? _context.WrapObjectName(_tableInfo.Schema) + _context.DataSourceInfo.CompositeIdentifierSeparator
                          : "")
                      + _context.WrapObjectName(_tableInfo.Name);
         _idColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsId);
         _versionColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsVersion);
+        EnumParseBehavior = enumParseBehavior;
     }
 
-    public String WrappedTableName
-    {
-        get
-        {
-            return _tableName;
-        }
-    }
-
+   
     public string MakeParameterName(DbParameter p)
     {
         return _usePositionalParameters ? "?" : $"{_parameterMarker}{p.ParameterName}";
@@ -83,53 +83,82 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             var colName = reader.GetName(i);
             if (_tableInfo.Columns.TryGetValue(colName, out var column))
             {
-                LogReader(reader);
-
-                object? value;
-                var rawValue = reader.GetValue(i);
-                if (rawValue == DBNull.Value || rawValue == null)
+                var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                if (value != null)
                 {
-                    value = null;
-                }
-                else
-                {
-                    var typeName = rawValue.GetType().FullName ?? "";
-                    if (typeName.Contains("MySqlDateTime")) // MySql.Data.Types.MySqlDateTime mysqlDate)
+                    var rt = reader.GetFieldType(i);
+                    var columnPropertyType = column.PropertyInfo.PropertyType;
+                    if (rt != columnPropertyType)
                     {
-                        //value = mysqlDate.IsNull || !mysqlDate.IsValidDateTime ? null : mysqlDate.GetDateTime();
-                        value = rawValue;
-                    }
-                    else
-                    {
-                        value = rawValue;
+                        //
+                        // Console.WriteLine("field types don't match for field: " +
+                        //                   column.PropertyInfo.Name +
+                        //                   " db returned: " +
+                        //                   rt.Name +
+                        //                   " object property is: " +
+                        //                   column.PropertyInfo.PropertyType.Name);
+
+                        if (column.EnumType != null)
+                        {
+                            // columnPropertyType = Nullable.GetUnderlyingType(column.PropertyInfo.PropertyType) ??
+                            //                      column.PropertyInfo.PropertyType;
+
+                            if (Enum.TryParse(column.EnumType, value.ToString(), true, out var result))
+                            {
+                                value = result;
+                            }
+                            else
+                            {
+                                switch (EnumParseBehavior)
+                                {
+                                    case EnumParseFailureMode.Throw:
+                                        throw new ArgumentException($"Cannot convert value {value} to type {column.PropertyInfo.PropertyType}.");
+                                    case EnumParseFailureMode.SetNullAndLog:
+                                        if (Nullable.GetUnderlyingType(columnPropertyType) == column.EnumType)
+                                        {
+                                            value = null;
+                                        }
+                                        else
+                                        {
+                                            throw new ArgumentException($"Cannot convert value {value} to type {column.PropertyInfo.PropertyType} and entity property is not nullable.");
+                                        }
+
+                                        //log
+                                        break;
+                                    case EnumParseFailureMode.SetDefaultValue:
+                                        //figure out how to get the default value
+                                        //log
+                                        value = Enum.GetValues(column.EnumType!).GetValue(0);
+                                        break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (rt == typeof(string) && 
+                                columnPropertyType == typeof(DateTime) &&
+                                value is string s)
+                            {
+                                value = DateTime.Parse(s);
+                            }
+                            
+                            if (columnPropertyType == typeof(Guid) && rt != typeof(Guid))
+                            {
+                                if (value is string guidStr && Guid.TryParse(guidStr, out var guid))
+                                    value = guid;
+                                else if (value is byte[] bytes && bytes.Length == 16)
+                                    value = new Guid(bytes);
+                            }
+                        }
                     }
                 }
 
-                Console.WriteLine($"{colName}:{value}");
-
-                if (value != null && value != DBNull.Value)
-                {
-                    var setter = GetOrCreateSetter(column.PropertyInfo);
-                    setter(obj, value);
-                }
+                var setter = GetOrCreateSetter(column.PropertyInfo);
+                setter(obj, value);
             }
         }
 
         return obj;
-    }
-
-    private static void LogReader(DbDataReader reader)
-    {
-        Console.WriteLine($"Reader FieldCount: {reader.FieldCount}");
-        for (int i = 0; i < reader?.FieldCount; i++)
-        {
-            var t = reader.GetFieldType(i);
-            Console.WriteLine($"Column {i}: {reader.GetName(i)} ({t})");
-            if (t == typeof(DateTime))
-            {
-                Console.WriteLine(reader?.GetFieldValue<DateTime?>(i)?.ToString("yyyy-MM-dd HH:mm:ss"));
-            }
-        }
     }
 
     public Task<T?> RetrieveOneAsync(T objectToUpdate, IDatabaseContext? context = null)
@@ -185,17 +214,36 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             }
 
             var paramName = $"p{pid++}";
+            var value = column.PropertyInfo.GetValue(objectToCreate);
+            if(value != null)
+            { 
+                if (column.EnumType != null)
+                {
+                    value = column.DbType == DbType.String
+                        ? value.ToString() // Save enum as string name
+                        : Convert.ChangeType(value, Enum.GetUnderlyingType(column.EnumType)); // Save enum as int
+                }
+            }
+            
             var p = _context.CreateDbParameter(paramName,
                 column.DbType,
-                column.PropertyInfo.GetValue(objectToCreate));
-
+                value
+                );
+           
             columns.Append(_context.WrapObjectName(column.Name));
-            values.Append(MakeParameterName(p));
-            parameters.Add(p);
+            if (Utils.IsNullOrDbNull(value))
+            {
+                values.Append($"NULL");
+            }
+            else
+            {
+                values.Append(MakeParameterName(p));
+                parameters.Add(p);
+            }
         }
 
         sc.Query.Append("INSERT INTO ")
-            .Append(_tableName)
+            .Append(WrappedWrappedTableName)
             .Append(" (")
             .Append(columns)
             .Append(") VALUES (")
@@ -203,11 +251,9 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             .Append(")");
 
         sc.AppendParameters(parameters);
-        //Console.WriteLine(sc.Query); // Should show @p0, @p1, etc.
-        //foreach (var param in parameters)
-        //    Console.WriteLine($"[{param.ParameterName}] = {param.Value} ({param.DbType})");
         return sc;
     }
+    
 
     public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null)
     {
@@ -216,7 +262,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var sb = sc.Query;
         sb.Append("SELECT ");
         sb.Append(string.Join(", ", _tableInfo.Columns.Values.Select(col => _context.WrapObjectName(col.Name))));
-        sb.Append(" FROM ").Append(_tableName);
+        sb.Append(" FROM ").Append(WrappedWrappedTableName);
 
         BuildWhere(_context.WrapObjectName(_idColumn.Name), listOfIds, sc, context);
 
@@ -293,7 +339,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         parameters.Add(pId);
 
         sc.Query.Append("UPDATE ")
-            .Append(_tableName)
+            .Append(WrappedWrappedTableName)
             .Append(" SET ")
             .Append(setClause)
             .Append(" WHERE ")
@@ -326,16 +372,16 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var sc = new SqlContainer(context);
 
         var idCol = _idColumn;
-        if (idCol == null) throw new InvalidOperationException($"row identity column for table {_tableName} not found");
+        if (idCol == null) throw new InvalidOperationException($"row identity column for table {WrappedWrappedTableName} not found");
 
         var p = _context.CreateDbParameter("id", idCol.DbType, id);
         sc.AppendParameters(p);
 
         sc.Query.Append("DELETE FROM ")
-            .Append(_tableName)
+            .Append(WrappedWrappedTableName)
             .Append(" WHERE ")
             .Append(context.WrapObjectName(idCol.Name));
-        if (p.Value == null || p.Value == DBNull.Value)
+        if (Utils.IsNullOrDbNull(p.Value))
         {
             sc.Query.Append(" IS NULL ");
         }
@@ -352,19 +398,20 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     private ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TID> ids, ISqlContainer sqlContainer,
         IDatabaseContext context)
     {
-        if (ids == null || ids.Count() == 0)
+        var enumerable = ids?.Distinct().ToList();
+        if (enumerable == null || enumerable.Count == 0)
         {
             return sqlContainer;
         }
 
-        ids = ids.Distinct();
-        var hasNull = ids.Any(v => v == null || DBNull.Value.Equals(v));
+        
+        var hasNull = enumerable.Any(v => Utils.IsNullOrDbNull(v));
         var sb = new StringBuilder();
-        var dbType = _idColumn.DbType;
+        var dbType = _idColumn!.DbType;
         var idx = 0;
-        foreach (var id in ids)
+        foreach (var id in enumerable)
         {
-            if (!hasNull || (id != null && !DBNull.Value.Equals(id)))
+            if (!hasNull || !Utils.IsNullOrDbNull(id))
             {
                 if (sb.Length > 0)
                 {
@@ -385,11 +432,11 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
         if (hasNull)
         {
-            if (sb.Length > 0) sb.Append(" AND ");
+            if (sb.Length > 0) sb.Append("\nOR ");
             sb.Append(wrappedColumnName + " IS NULL");
         }
 
-        sb.Insert(0, "\n WHERE ");
+        sb.Insert(0, "\nWHERE ");
         sqlContainer.Query.Append(sb);
         return sqlContainer;
     }

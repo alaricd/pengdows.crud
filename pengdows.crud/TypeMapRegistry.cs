@@ -31,7 +31,9 @@ public class TypeMapRegistry : ITypeMapRegistry
                         PropertyInfo = prop,
                         DbType = colAttr.Type,
                         IsNonUpdateable = prop.GetCustomAttribute<NonUpdateableAttribute>() != null,
-                        IsId = prop.GetCustomAttribute<IdAttribute>() != null
+                        IsId = prop.GetCustomAttribute<IdAttribute>() != null,
+                        IsEnum = prop.GetCustomAttribute<EnumColumnAttribute>() != null,
+                        EnumType = prop.GetCustomAttribute<EnumColumnAttribute>()?.EnumType
                     };
             }
 

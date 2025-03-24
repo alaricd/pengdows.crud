@@ -13,7 +13,7 @@ public class TransactionContext : ITransactionContext
     private bool _isCompleted;
     private bool _rolledBack;
 
-    public TransactionContext(IDatabaseContext context)
+    public TransactionContext(IDatabaseContext context, IsolationLevel isolationLevel)
     {
         _context = context;
         _connection = _context.GetConnection(ExecutionType.Write);
@@ -53,7 +53,7 @@ public class TransactionContext : ITransactionContext
         return _context.WrapObjectName(name);
     }
 
-    public TransactionContext BeginTransaction()
+    public TransactionContext BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
     {
         throw new NotImplementedException(
             "TransactionContext cannot start a new transaction, nested transactions are not supported.");
@@ -63,6 +63,27 @@ public class TransactionContext : ITransactionContext
     {
         return _context.GenerateRandomName(length);
     }
+
+    public DbParameter CreateDbParameter<T>(DbType type, T value)
+    {
+        return _context.CreateDbParameter(type, value);
+    }
+
+    public void AssertIsReadConnection()
+    {
+        _context.AssertIsReadConnection();
+    }
+
+    public void AssertIsWriteConnection()
+    {
+        _context.AssertIsWriteConnection();
+    }
+
+    public void CloseAndDisposeConnection(DbConnection connection)
+    {
+        _context.CloseAndDisposeConnection(connection);
+    }
+
 
     public DbMode ConnectionMode => DbMode.SingleConnection;
 
@@ -82,7 +103,7 @@ public class TransactionContext : ITransactionContext
         finally
         {
             _isCompleted = true;
-            _connection.Close();
+           _context.CloseAndDisposeConnection(_connection);
         }
     }
 
@@ -96,7 +117,7 @@ public class TransactionContext : ITransactionContext
         finally
         {
             _isCompleted = true;
-            _connection.Close();
+            _context.CloseAndDisposeConnection(_connection);
         }
     }
 

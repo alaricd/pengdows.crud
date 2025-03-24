@@ -1,28 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-    <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <PackageId>pengdows.crud</PackageId>
-        <Version>1.0.$(BuildNumber)</Version> <!-- Version with incremental build number -->
-        <Description>High Speed Lightweight ORM/DB Access</Description>
-        <Authors>Pengdows</Authors>
-        <PackageTags>crud,nuget</PackageTags>
-        <RepositoryUrl>https://github.com/pengdows/pengdows.crud</RepositoryUrl>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <PackageProjectUrl>https://www.pengdows.com/2016/02/14/pengdows-crud/</PackageProjectUrl>
-    </PropertyGroup>
-
-    <Target Name="IncrementVersion" BeforeTargets="Build">
-        <Exec Command="powershell -Command [System.IO.File]::WriteAllText('version.txt', (Get-Date).ToString('yyyyMMddHHmmss'))"/>
-        <PropertyGroup>
-            <BuildNumber>$([System.IO.File]::ReadAllText('version.txt'))</BuildNumber>
-        </PropertyGroup>
-    </Target>
-
-    <ItemGroup>
-        <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.3"/>
-    </ItemGroup>
-
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>pengdows.crud</PackageId>
+    <Version>2025.03.24.11</Version>
+    <Description>High Speed Lightweight ORM/DB Access</Description>
+    <Authors>Pengdows</Authors>
+    <PackageTags>crud,nuget</PackageTags>
+    <RepositoryUrl>https://github.com/pengdows/pengdows.crud</RepositoryUrl>
+    <PackageProjectUrl>https://www.pengdows.com/2016/02/14/pengdows-crud/</PackageProjectUrl>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Remove="Nerdbank.GitVersioning" />
+  </ItemGroup>
 </Project>

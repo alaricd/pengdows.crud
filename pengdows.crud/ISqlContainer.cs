@@ -9,9 +9,9 @@ public interface ISqlContainer
     StringBuilder Query { get; }
 
     DbParameter AppendParameter<T>(string? name, DbType type, T value);
-    Task<DbDataReader> ExecuteReaderAsync();
-    Task<T?> ExecuteScalarAsync<T>();
-    Task<int> ExecuteNonQueryAsync();
     void AppendParameters(List<DbParameter> list);
     void AppendParameters(DbParameter parameter);
+    Task<int> ExecuteNonQueryAsync(CommandType commandType = CommandType.Text);
+    Task<T?> ExecuteScalarAsync<T>(CommandType commandType = CommandType.Text);
+    Task<DbDataReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text);
 }

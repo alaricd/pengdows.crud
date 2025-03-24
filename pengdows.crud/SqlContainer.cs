@@ -32,14 +32,28 @@ public class SqlContainer : ISqlContainer
         return parameter;
     }
 
-    public async Task<int> ExecuteNonQueryAsync()
+    public async Task<int> ExecuteNonQueryAsync(CommandType commandType = CommandType.Text)
     {
-        return await ExecuteAsync(cmd => cmd.ExecuteNonQueryAsync(), ExecutionType.Write);
+        _context.AssertIsWriteConnection();
+        DbConnection conn = null;
+        DbCommand cmd = null;
+        try
+        {
+            conn = _context.GetConnection(ExecutionType.Write);
+            cmd = PrepareCommand(conn);
+            cmd.CommandType = commandType;
+            return await cmd.ExecuteNonQueryAsync();
+        }
+        finally
+        {
+            Cleanup(cmd, conn, ExecutionType.Write);
+        }
     }
 
-    public async Task<T?> ExecuteScalarAsync<T>()
+    public async Task<T?> ExecuteScalarAsync<T>(CommandType commandType = CommandType.Text)
     {
-      await using var reader = await ExecuteReaderAsync();
+        _context.AssertIsReadConnection();
+      await using var reader = await ExecuteReaderAsync(commandType);
       if (await reader.ReadAsync().ConfigureAwait(false))
       {
           if (!reader.IsDBNull(0))
@@ -51,28 +65,32 @@ public class SqlContainer : ISqlContainer
       throw new Exception("No rows returned");
     }
 
-    public async Task<DbDataReader> ExecuteReaderAsync()
+    public async Task<DbDataReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text)
     {
+        _context.AssertIsReadConnection();
+
         DbConnection conn;
         DbCommand cmd = null;
-        bool closeConnection = true;
         try
         {
             conn = _context.GetConnection(ExecutionType.Read);
-            var c = _context as DatabaseContext;
-            var behavior = (_context is TransactionContext || conn == c?.SingleConnection)
+            // unless the databaseContext is in a transaction or SingleConnection mode, 
+            // a new connection is returned for every READ operation, therefore, we 
+            // are going to set the connection to close and dispose when the reader is 
+            // closed. This prevents leaking
+            var behavior = (_context is TransactionContext || _context.ConnectionMode == DbMode.SingleConnection)
                 ? CommandBehavior.Default
                 : CommandBehavior.CloseConnection;
             behavior |= CommandBehavior.SingleResult;
             cmd = conn.CreateCommand();
             cmd.CommandText = Query.ToString();
-            cmd.CommandType = CommandType.Text;
+            cmd.CommandType = commandType;
             cmd.Parameters.AddRange(_parameters.ToArray());
             OpenConnection(conn);
             // if this is our single connection to the database, for a transaction
-            //or sqlce mode, or single connection mode, we will NOT close the connection.
+            //or sqlCe mode, or single connection mode, we will NOT close the connection.
             // otherwise, we will have the connection set to autoclose so that we 
-            //close the underlying connection when the dbdatareader is closed;
+            //close the underlying connection when the DbDataReader is closed;
             return await cmd.ExecuteReaderAsync(behavior).ConfigureAwait(false);
         }
         finally
@@ -90,6 +108,7 @@ public class SqlContainer : ISqlContainer
         OpenConnection(conn);
         var cmd = conn.CreateCommand();
         cmd.CommandText = _context.MissingSqlSettings + Query;
+        Console.WriteLine(Query);
         if (_parameters.Count > 0)
             cmd.Parameters.AddRange(_parameters.ToArray());
         if (_context.DataSourceInfo.PrepareStatements)
@@ -117,27 +136,7 @@ public class SqlContainer : ISqlContainer
             return;
         if (!(_context is TransactionContext))
         {
-            var dbContext = _context as DatabaseContext;
-            if (dbContext?.SingleConnection != conn)
-            {
-                conn.Dispose();
-            }
-        }
-    }
-
-    private async Task<TResult> ExecuteAsync<TResult>(Func<DbCommand, Task<TResult>> action,
-        ExecutionType executionType)
-    {
-        var conn = _context.GetConnection(executionType);
-
-        var cmd = PrepareCommand(conn);
-        try
-        {
-            return await action(cmd).ConfigureAwait(false);
-        }
-        finally
-        {
-            Cleanup(cmd, conn, executionType);
+            _context.CloseAndDisposeConnection(conn);
         }
     }
 

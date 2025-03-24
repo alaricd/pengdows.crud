@@ -12,11 +12,16 @@ public class DataSourceInformation : IDataSourceInformation
         {
             var metaData = connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
             var metaDataRow = metaData.Rows[0];
+            // foreach (DataColumn col in metaData.Columns)
+            // {
+            //     Console.WriteLine($"{col.ColumnName}:{metaDataRow[col.ColumnName]}");
+            // }
             SupportsNamedParameters = GetColumnValue<bool>(metaDataRow, "SupportsNamedParameters");
             ParameterMarker = GetColumnValue<string>(metaDataRow, "ParameterMarkerFormat", "?");
             ParameterNameMaxLength = GetColumnValue(metaDataRow, "ParameterNameMaxLength", 0);
             ParameterNamePatternRegex = new Regex(GetColumnValue<string>(metaDataRow, "ParameterNamePattern", ""));
             DatabaseProductName = GetColumnValue<string>(metaDataRow, "DataSourceProductName", "Unknown");
+            //if(DatabaseProductName == "Unknown")
             DatabaseProductVersion = GetColumnValue<string>(metaDataRow, "DataSourceProductVersion", "Unknown");
             //Schema and Catalog Separators were combined into this, not every provider gives use this value,
             //but everything seems to use a period.  Leaving it just in case we need to parse it later.
@@ -47,13 +52,13 @@ public class DataSourceInformation : IDataSourceInformation
     public string QuotePrefix { get; private set; }
     public string QuoteSuffix { get; private set; }
     public bool SupportsNamedParameters { get; }
-    public string ParameterMarker { get; private set; }
-    public int ParameterNameMaxLength { get; private set; }
+    public string ParameterMarker { get; }
+    public int ParameterNameMaxLength { get; }
     public Regex ParameterNamePatternRegex { get; }
     public string DatabaseProductName { get; }
     public string DatabaseProductVersion { get; }
     public string CompositeIdentifierSeparator { get; }
-    public bool PrepareStatements { get; set; }
+    public bool PrepareStatements { get; }
 
     private string ExtractParameterMarker()
     {
@@ -62,7 +67,9 @@ public class DataSourceInformation : IDataSourceInformation
         var productName = DatabaseProductName?.ToLowerInvariant() ?? string.Empty;
         if (productName.Contains("mysql") || productName.Contains("sql server"))
             return "@";
-        if (productName.Contains("postgres") || productName.Contains("oracle"))
+        if (productName.Contains("postgres") || 
+            productName.Contains("npgsql") ||
+            productName.Contains("oracle"))
             return ":";
         //if all else fails, assume no named parameters.
         return "?";
@@ -71,8 +78,10 @@ public class DataSourceInformation : IDataSourceInformation
     private void InferQuoteCharacters()
     {
         var productName = DatabaseProductName?.ToLowerInvariant();
+        
         if (!string.IsNullOrWhiteSpace(productName))
         {
+            //(([^\`]|\`\`)*)
             if (productName.Contains("mysql"))
             {
                 QuotePrefix = QuoteSuffix = "`";
@@ -97,10 +106,13 @@ public class DataSourceInformation : IDataSourceInformation
         try
         {
             // Check if the column exists and is not DBNull
-            if (row.Table.Columns.Contains(columnName) && row[columnName] != DBNull.Value)
-                return (T)Convert.ChangeType(row[columnName], typeof(T));
+            var value = row[columnName];
+            if (Utils.IsNullOrDbNull(value))
+            {
+                return defaultValue;
+            }
 
-            return defaultValue;
+            return (T)Convert.ChangeType(value, typeof(T));
         }
         catch (Exception ex)
         {

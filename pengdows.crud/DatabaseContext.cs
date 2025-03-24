@@ -14,8 +14,8 @@ public class DatabaseContext : IDatabaseContext
     private DataSourceInformation _dataSourceInfo;
     private bool _isSqlServer;
     private string _missingSqlSettings;
-
-    internal DbConnection? SingleConnection => _connection;
+    private bool _isWriteConnection = true;
+    private bool _isReadConnection = true;
     
     public DatabaseContext(string connectionString, DbProviderFactory factory, ITypeMapRegistry typeMapRegistry,
         DbMode mode = DbMode.Standard)
@@ -73,14 +73,18 @@ public class DatabaseContext : IDatabaseContext
         return sb.ToString();
     }
 
-    public TransactionContext BeginTransaction()
+    public TransactionContext BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
     {
-        return new TransactionContext(this);
+        if (!_isWriteConnection && isolationLevel == IsolationLevel.RepeatableRead)
+        {
+            throw new InvalidOperationException("Read only transactions must be 'RepeatableRead' isolationLevel.");
+        }
+        return new TransactionContext(this, isolationLevel);
     }
 
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
-        return new SqlContainer(this,  query);
+        return new SqlContainer(this, query);
     }
 
     public DbParameter CreateDbParameter<T>(string name, DbType type, T value)
@@ -92,7 +96,7 @@ public class DatabaseContext : IDatabaseContext
             name = GenerateRandomName();
         }
 
-        var valueIsNull = (value == null || value is DBNull);
+        var valueIsNull = Utils.IsNullOrDbNull(value);
         p.ParameterName = name;
         p.DbType = type;
         p.Value = valueIsNull ? DBNull.Value : value;
@@ -215,12 +219,19 @@ public class DatabaseContext : IDatabaseContext
             CheckForSqlServerSettings(conn);
             ConnectionString = csb.ConnectionString;
             if (mode != DbMode.Standard)
-                //ApplyIndexedViewSettings(conn);
+            {
+                // if the mode is anything but standard
+                // we store it as our minimal connection
                 _connection = conn;
+            }
         }
         finally
         {
-            if (mode != DbMode.Standard) conn?.Dispose();
+            if (mode == DbMode.Standard)
+            {
+                //if it is standard mode, we can close it.
+                conn?.Dispose();
+            }
         }
     }
 
@@ -247,7 +258,7 @@ public class DatabaseContext : IDatabaseContext
                     break;
             }
 
-            Console.WriteLine("Number of open connections:{0}", _connectionCount);
+            //Console.WriteLine("Number of open connections:{0}", _connectionCount);
         };
     }
 
@@ -289,7 +300,8 @@ public class DatabaseContext : IDatabaseContext
         var x = validchars.Length;
         foreach (var b in buffer)
         {
-            // Convert each byte to a letter in the 'a' to 'z' range
+            // Convert each byte to a letter in validchars array
+            // enforcing the fist letter into the 'a' to 'z' range
             var mod = x;
             if (i++ == 0)
             {
@@ -314,6 +326,31 @@ public class DatabaseContext : IDatabaseContext
     {
         return CreateDbParameter(null, type, value);
     }
+
+    public void AssertIsReadConnection()
+    {
+        if (!_isReadConnection)
+        {
+            throw new InvalidOperationException($"The connection is not read connection.");
+        }
+    }
+
+    public void AssertIsWriteConnection()
+    {
+        if (!_isWriteConnection)
+        {
+            throw new InvalidOperationException($"The connection is not write connection.");
+        }
+    }
+
+    public void CloseAndDisposeConnection(DbConnection connection)
+    {
+        if (_connection != connection)
+        {
+            connection?.Dispose();
+        }
+    }
+
 
     private void Dispose(bool disposing)
     {

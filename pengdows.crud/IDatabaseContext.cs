@@ -13,6 +13,11 @@ public interface IDatabaseContext : IDisposable
     DbParameter CreateDbParameter<T>(string name, DbType type, T value);
     DbConnection GetConnection(ExecutionType executionType);
     string WrapObjectName(string name);
-    TransactionContext BeginTransaction();
+    TransactionContext BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted);
     string GenerateRandomName(int length = 8);
+    DbParameter CreateDbParameter<T>(DbType type, T value);
+     
+   void AssertIsReadConnection();
+   void AssertIsWriteConnection();
+   void CloseAndDisposeConnection(DbConnection connection);
 }

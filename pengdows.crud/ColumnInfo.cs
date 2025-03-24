@@ -11,4 +11,6 @@ public class ColumnInfo
     public DbType DbType { get; set; }
     public bool IsVersion { get; set; }
     public bool IsNonUpdateable { get; set; }
+    public bool IsEnum { get; set; }
+    public Type? EnumType { get; set; }
 }
