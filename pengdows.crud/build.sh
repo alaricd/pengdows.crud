@@ -2,9 +2,12 @@
 set -e
 
 # Example: YYYY.MM.DD.BUILDNUM
-BUILD_DATE=$(date +%Y.%m.%d)
-BUILD_NUM=$(git rev-list --count HEAD)  # Optional, gives you incrementing number
-VERSION="${BUILD_DATE}.${BUILD_NUM}"
+#BUILD_DATE=$(date +%Y.%m.%d)
+#BUILD_NUM=$(git rev-list --count HEAD)  # Optional, gives you incrementing number
+#VERSION="${BUILD_DATE}.${BUILD_NUM}"
+# Version format: 1.0.<epoch-seconds>
+EPOCH=$(date +%s)
+VERSION="1.0.${EPOCH}"
 
 echo "Building pengdows.crud version $VERSION"
 

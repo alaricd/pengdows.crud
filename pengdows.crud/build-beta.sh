@@ -1,10 +1,9 @@
 #!/bin/bash
 set -e
 
-# Example version: YYYY.MM.DD.BUILDNUM
-BUILD_DATE=$(date +%Y.%m.%d)
-BUILD_NUM=$(git rev-list --count HEAD)  # Incrementing build number based on commits
-VERSION="${BUILD_DATE}.${BUILD_NUM}-beta"
+# Version format: 1.0.<epoch-seconds>
+EPOCH=$(date +%s)
+VERSION="1.0.${EPOCH}"
 
 echo "Building pengdows.crud version $VERSION"
 

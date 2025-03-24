@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>pengdows.crud</PackageId>
-    <Version>2025.03.24.11</Version>
+    <Version>1.0.1742814434</Version>
     <Description>High Speed Lightweight ORM/DB Access</Description>
     <Authors>Pengdows</Authors>
     <PackageTags>crud,nuget</PackageTags>
