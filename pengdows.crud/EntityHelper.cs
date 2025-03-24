@@ -214,17 +214,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             }
 
             var paramName = $"p{pid++}";
-            var value = column.PropertyInfo.GetValue(objectToCreate);
-            if(value != null)
-            { 
-                if (column.EnumType != null)
-                {
-                    value = column.DbType == DbType.String
-                        ? value.ToString() // Save enum as string name
-                        : Convert.ChangeType(value, Enum.GetUnderlyingType(column.EnumType)); // Save enum as int
-                }
-            }
-            
+            var value = column.MakeParameterValueFromField(objectToCreate);
             var p = _context.CreateDbParameter(paramName,
                 column.DbType,
                 value
@@ -303,8 +293,8 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                 continue;
             }
 
-            var newValue = column.PropertyInfo.GetValue(objectToUpdate);
-            var originalValue = loadOriginal ? column.PropertyInfo.GetValue(original) : null;
+            var newValue = column.MakeParameterValueFromField(objectToUpdate);
+            var originalValue = loadOriginal ? column.MakeParameterValueFromField(original) : null;
 
             // Skip unchanged values if original is loaded.
             if (loadOriginal && Equals(newValue, originalValue)) continue;
@@ -348,7 +338,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
         if (_versionColumn != null)
         {
-            var versionValue = _versionColumn.PropertyInfo.GetValue(objectToUpdate);
+            var versionValue = _versionColumn.MakeParameterValueFromField(objectToUpdate);
             if (versionValue == null)
             {
                 sc.Query.Append(" AND ").Append(context.WrapObjectName(_versionColumn.Name)).Append(" IS NULL");

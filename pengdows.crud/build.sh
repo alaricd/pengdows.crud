@@ -7,7 +7,7 @@ set -e
 #VERSION="${BUILD_DATE}.${BUILD_NUM}"
 # Version format: 1.0.<epoch-seconds>
 EPOCH=$(date +%s)
-VERSION="1.0.${EPOCH}"
+VERSION="1.0.${EPOCH}.1"
 
 echo "Building pengdows.crud version $VERSION"
 
