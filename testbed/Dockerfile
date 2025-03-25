@@ -5,17 +5,17 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["testbest/testbest.csproj", "testbest/"]
-RUN dotnet restore "testbest/testbest.csproj"
+COPY ["testbed/testbed.csproj", "testbed/"]
+RUN dotnet restore "testbed/testbed.csproj"
 COPY . .
-WORKDIR "/src/testbest"
-RUN dotnet build "testbest.csproj" -c $BUILD_CONFIGURATION -o /app/build
+WORKDIR "/src/testbed"
+RUN dotnet build "testbed.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "testbest.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "testbed.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "testbest.dll"]
+ENTRYPOINT ["dotnet", "testbed.dll"]

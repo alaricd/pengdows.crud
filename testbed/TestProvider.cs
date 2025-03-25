@@ -13,6 +13,7 @@ public class TestProvider
         _helper = new EntityHelper<TestTable, int>(databaseContext);
     }
 
+
     public async Task RunTest()
     {
         await CreateTable(_context);
@@ -29,18 +30,23 @@ public class TestProvider
     private async Task CountTestRows(DatabaseContext context, EntityHelper<TestTable, int> helper)
     {
         var sc = _context.CreateSqlContainer();
-        sc.Query.AppendFormat("SELECT COUNT(*) FROM {0};", helper.WrappedTableName);
+        sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", helper.WrappedWrappedTableName);
         int count =await  sc.ExecuteScalarAsync<int>();
         Console.WriteLine($"Count: {count}");
     }
 
-    private async Task CreateTable(DatabaseContext databaseContext)
+    public virtual async Task CreateTable(DatabaseContext databaseContext)
     {
         var sqlContainer = databaseContext.CreateSqlContainer();
         var qp = databaseContext.DataSourceInfo.QuotePrefix;
         var qs = databaseContext.DataSourceInfo.QuoteSuffix;
-        sqlContainer.Query.AppendFormat(@"DROP TABLE IF EXISTS {0}test_table{1};", qp, qs);
-        await sqlContainer.ExecuteNonQueryAsync();
+        sqlContainer.Query.AppendFormat(@"DROP TABLE IF EXISTS {0}test_table{1}", qp, qs);
+        try{await sqlContainer.ExecuteNonQueryAsync();}
+        catch (Exception ex) //when (ex.Number == 942)
+        {
+            // Table did not exist, ignore
+        }
+
         sqlContainer.Query.Clear();
         sqlContainer.Query.AppendFormat(@"
 CREATE TABLE {0}test_table{1} (
@@ -57,7 +63,7 @@ CREATE TABLE {0}test_table{1} (
             try
             {
                 sqlContainer.Query.Clear();
-                sqlContainer.Query.AppendFormat("TRUNCATE TABLE {0}test_table{1};", qp, qs);
+                sqlContainer.Query.AppendFormat("TRUNCATE TABLE {0}test_table{1}", qp, qs);
                 await sqlContainer.ExecuteNonQueryAsync();
             }
             catch (Exception ex)
@@ -74,8 +80,8 @@ CREATE TABLE {0}test_table{1} (
         var t = new TestTable
         {
             Id = 1,
-            Name = "Test",
-            CreatedAt = DateTime.Now
+            Name = NameEnum.Test,
+            CreatedAt = DateTime.UtcNow
         };
         var sq = helper.BuildCreate(t);
         await sq.ExecuteNonQueryAsync();

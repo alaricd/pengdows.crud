@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -86,9 +85,11 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                 var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
                 if (value != null)
                 {
-                    var rt = reader.GetFieldType(i);
+                    var dbFieldType = reader.GetFieldType(i);
                     var columnPropertyType = column.PropertyInfo.PropertyType;
-                    if (rt != columnPropertyType)
+                    value = CoerceData(value, dbFieldType, columnPropertyType, column);
+                    /*
+                    if (dbFieldType != columnPropertyType)
                     {
                         //
                         // Console.WriteLine("field types don't match for field: " +
@@ -135,14 +136,14 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                         }
                         else
                         {
-                            if (rt == typeof(string) && 
+                            if (dbFieldType == typeof(string) && 
                                 columnPropertyType == typeof(DateTime) &&
                                 value is string s)
                             {
                                 value = DateTime.Parse(s);
                             }
                             
-                            if (columnPropertyType == typeof(Guid) && rt != typeof(Guid))
+                            if (columnPropertyType == typeof(Guid) && dbFieldType != typeof(Guid))
                             {
                                 if (value is string guidStr && Guid.TryParse(guidStr, out var guid))
                                     value = guid;
@@ -150,15 +151,64 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                                     value = new Guid(bytes);
                             }
                         }
-                    }
-                }
-
+                    }*/
+                } 
+                
+           
                 var setter = GetOrCreateSetter(column.PropertyInfo);
                 setter(obj, value);
             }
         }
 
         return obj;
+    }
+
+    private object? CoerceData(object? value, Type dbFieldType, Type propertyType, ColumnInfo column)
+    {
+        if (value == null) return null;
+
+        // No coercion needed if types match
+        if (dbFieldType == propertyType)
+            return value;
+
+        // Enum coercion
+        if (column.EnumType != null)
+        {
+            if (Enum.TryParse(column.EnumType, value.ToString(), true, out var result))
+                return result;
+
+            switch (EnumParseBehavior)
+            {
+                case EnumParseFailureMode.Throw:
+                    throw new ArgumentException($"Cannot convert value '{value}' to enum {column.EnumType}.");
+
+                case EnumParseFailureMode.SetNullAndLog:
+                    if (Nullable.GetUnderlyingType(propertyType) == column.EnumType)
+                        return null;
+                    throw new ArgumentException($"Cannot convert '{value}' to non-nullable enum {column.EnumType}.");
+
+                case EnumParseFailureMode.SetDefaultValue:
+                    return Enum.GetValues(column.EnumType).GetValue(0);
+            }
+        }
+
+        // DateTime coercion
+        if (dbFieldType == typeof(string) && propertyType == typeof(DateTime) && value is string s)
+            return DateTime.Parse(s);
+
+        // Guid coercion
+        if (propertyType == typeof(Guid))
+        {
+            if (value is string guidStr && Guid.TryParse(guidStr, out var guid))
+                return guid;
+            if (value is byte[] bytes && bytes.Length == 16)
+                return new Guid(bytes);
+        }
+
+        // Future: handle decimal to int64 for Oracle or other quirks
+
+        // Fallback — no conversion
+        return value;
     }
 
     public Task<T?> RetrieveOneAsync(T objectToUpdate, IDatabaseContext? context = null)
@@ -243,18 +293,47 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         sc.AppendParameters(parameters);
         return sc;
     }
-    
 
-    public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null)
+    public ISqlContainer BuildBaseRetrieve(string alias, IDatabaseContext? context = null)
     {
         context ??= _context;
+        var wrappedAlias = "";
+        if (!String.IsNullOrWhiteSpace(alias))
+        {
+            wrappedAlias = context.WrapObjectName(alias) +
+                           context.DataSourceInfo.CompositeIdentifierSeparator;
+        }
+
         var sc = new SqlContainer(context);
         var sb = sc.Query;
         sb.Append("SELECT ");
-        sb.Append(string.Join(", ", _tableInfo.Columns.Values.Select(col => _context.WrapObjectName(col.Name))));
+        sb.Append(string.Join(", ", _tableInfo.Columns.Values.Select(col => string.Format("{0}{1}", 
+            wrappedAlias, 
+             context.WrapObjectName(col.Name)))));
         sb.Append(" FROM ").Append(WrappedWrappedTableName);
+        sb.Append(" " + wrappedAlias.Substring(0, wrappedAlias.Length - 1));
+         
+        return sc;
+    }
 
-        BuildWhere(_context.WrapObjectName(_idColumn.Name), listOfIds, sc, context);
+    public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null, String alias = "a")
+    {
+        context ??= _context;
+        var sc = BuildBaseRetrieve(alias, context);
+        var wrappedAlias = "";
+        if (!String.IsNullOrWhiteSpace(alias))
+        {
+            wrappedAlias = context.WrapObjectName(alias) +
+                           context.DataSourceInfo.CompositeIdentifierSeparator;
+        }
+
+        var wrappedColumnName = wrappedAlias +
+                                _context.WrapObjectName(_idColumn.Name);
+        BuildWhere(
+            wrappedColumnName,
+            listOfIds,
+            sc, 
+            context);
 
         return sc;
     }

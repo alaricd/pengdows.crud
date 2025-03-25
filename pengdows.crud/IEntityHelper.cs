@@ -7,7 +7,7 @@ namespace pengdows.crud;
 public interface IEntityHelper<T, TID> where T : class, new()
 {
     ISqlContainer BuildCreate(T objectToCreate, IDatabaseContext? context = null);
-    ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null);
+    ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null, String alias = "a");
     Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, IDatabaseContext? context = null);
 
     Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, bool loadOriginal = true,
@@ -22,4 +22,5 @@ public interface IEntityHelper<T, TID> where T : class, new()
     T MapReaderToObject(DbDataReader reader);
     String WrappedWrappedTableName { get; }
     public EnumParseFailureMode EnumParseBehavior { get; set; }
+    ISqlContainer BuildBaseRetrieve(string alias, IDatabaseContext? context = null);
 }
