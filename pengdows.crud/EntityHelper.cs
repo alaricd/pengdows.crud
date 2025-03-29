@@ -19,10 +19,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     private readonly bool _usePositionalParameters;
 
     private readonly ColumnInfo? _versionColumn;
-    public String WrappedWrappedTableName { get; }
 
-    public EnumParseFailureMode EnumParseBehavior { get; set; } 
-    
     public EntityHelper(IDatabaseContext databaseContext,
         EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw) :
         this(databaseContext, databaseContext.TypeMapRegistry)
@@ -40,15 +37,20 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         _usePositionalParameters = _context.DataSourceInfo.ParameterMarker == "?";
 
         WrappedWrappedTableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
-                         ? _context.WrapObjectName(_tableInfo.Schema) + _context.DataSourceInfo.CompositeIdentifierSeparator
-                         : "")
-                     + _context.WrapObjectName(_tableInfo.Name);
+                                      ? _context.WrapObjectName(_tableInfo.Schema) +
+                                        _context.DataSourceInfo.CompositeIdentifierSeparator
+                                      : "")
+                                  + _context.WrapObjectName(_tableInfo.Name);
         _idColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsId);
         _versionColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsVersion);
         EnumParseBehavior = enumParseBehavior;
     }
 
-   
+    public string WrappedWrappedTableName { get; }
+
+    public EnumParseFailureMode EnumParseBehavior { get; set; }
+
+
     public string MakeParameterName(DbParameter p)
     {
         return _usePositionalParameters ? "?" : $"{_parameterMarker}{p.ParameterName}";
@@ -83,78 +85,10 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             if (_tableInfo.Columns.TryGetValue(colName, out var column))
             {
                 var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
-                if (value != null)
-                {
-                    var dbFieldType = reader.GetFieldType(i);
-                    var columnPropertyType = column.PropertyInfo.PropertyType;
-                    value = CoerceData(value, dbFieldType, columnPropertyType, column);
-                    /*
-                    if (dbFieldType != columnPropertyType)
-                    {
-                        //
-                        // Console.WriteLine("field types don't match for field: " +
-                        //                   column.PropertyInfo.Name +
-                        //                   " db returned: " +
-                        //                   rt.Name +
-                        //                   " object property is: " +
-                        //                   column.PropertyInfo.PropertyType.Name);
 
-                        if (column.EnumType != null)
-                        {
-                            // columnPropertyType = Nullable.GetUnderlyingType(column.PropertyInfo.PropertyType) ??
-                            //                      column.PropertyInfo.PropertyType;
+                var dbFieldType = reader.GetFieldType(i);
+                value = TypeCoercionHelper.Coerce(value, dbFieldType, column);
 
-                            if (Enum.TryParse(column.EnumType, value.ToString(), true, out var result))
-                            {
-                                value = result;
-                            }
-                            else
-                            {
-                                switch (EnumParseBehavior)
-                                {
-                                    case EnumParseFailureMode.Throw:
-                                        throw new ArgumentException($"Cannot convert value {value} to type {column.PropertyInfo.PropertyType}.");
-                                    case EnumParseFailureMode.SetNullAndLog:
-                                        if (Nullable.GetUnderlyingType(columnPropertyType) == column.EnumType)
-                                        {
-                                            value = null;
-                                        }
-                                        else
-                                        {
-                                            throw new ArgumentException($"Cannot convert value {value} to type {column.PropertyInfo.PropertyType} and entity property is not nullable.");
-                                        }
-
-                                        //log
-                                        break;
-                                    case EnumParseFailureMode.SetDefaultValue:
-                                        //figure out how to get the default value
-                                        //log
-                                        value = Enum.GetValues(column.EnumType!).GetValue(0);
-                                        break;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if (dbFieldType == typeof(string) && 
-                                columnPropertyType == typeof(DateTime) &&
-                                value is string s)
-                            {
-                                value = DateTime.Parse(s);
-                            }
-                            
-                            if (columnPropertyType == typeof(Guid) && dbFieldType != typeof(Guid))
-                            {
-                                if (value is string guidStr && Guid.TryParse(guidStr, out var guid))
-                                    value = guid;
-                                else if (value is byte[] bytes && bytes.Length == 16)
-                                    value = new Guid(bytes);
-                            }
-                        }
-                    }*/
-                } 
-                
-           
                 var setter = GetOrCreateSetter(column.PropertyInfo);
                 setter(obj, value);
             }
@@ -162,54 +96,74 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
         return obj;
     }
-
-    private object? CoerceData(object? value, Type dbFieldType, Type propertyType, ColumnInfo column)
-    {
-        if (value == null) return null;
-
-        // No coercion needed if types match
-        if (dbFieldType == propertyType)
-            return value;
-
-        // Enum coercion
-        if (column.EnumType != null)
-        {
-            if (Enum.TryParse(column.EnumType, value.ToString(), true, out var result))
-                return result;
-
-            switch (EnumParseBehavior)
-            {
-                case EnumParseFailureMode.Throw:
-                    throw new ArgumentException($"Cannot convert value '{value}' to enum {column.EnumType}.");
-
-                case EnumParseFailureMode.SetNullAndLog:
-                    if (Nullable.GetUnderlyingType(propertyType) == column.EnumType)
-                        return null;
-                    throw new ArgumentException($"Cannot convert '{value}' to non-nullable enum {column.EnumType}.");
-
-                case EnumParseFailureMode.SetDefaultValue:
-                    return Enum.GetValues(column.EnumType).GetValue(0);
-            }
-        }
-
-        // DateTime coercion
-        if (dbFieldType == typeof(string) && propertyType == typeof(DateTime) && value is string s)
-            return DateTime.Parse(s);
-
-        // Guid coercion
-        if (propertyType == typeof(Guid))
-        {
-            if (value is string guidStr && Guid.TryParse(guidStr, out var guid))
-                return guid;
-            if (value is byte[] bytes && bytes.Length == 16)
-                return new Guid(bytes);
-        }
-
-        // Future: handle decimal to int64 for Oracle or other quirks
-
-        // Fallback — no conversion
-        return value;
-    }
+    //
+    // private object? CoerceData(object? value, Type dbFieldType, Type propertyType, ColumnInfo column)
+    // {
+    //     if (value == null) return null;
+    //
+    //     // No coercion needed if types match
+    //     if (dbFieldType == propertyType)
+    //         return value;
+    //
+    //     // Enum coercion
+    //     if (column.EnumType != null)
+    //     {
+    //         if (Enum.TryParse(column.EnumType, value.ToString(), true, out var result))
+    //             return result;
+    //
+    //         switch (EnumParseBehavior)
+    //         {
+    //             case EnumParseFailureMode.Throw:
+    //                 throw new ArgumentException($"Cannot convert value '{value}' to enum {column.EnumType}.");
+    //
+    //             case EnumParseFailureMode.SetNullAndLog:
+    //                 if (Nullable.GetUnderlyingType(propertyType) == column.EnumType)
+    //                     return null;
+    //                 throw new ArgumentException($"Cannot convert '{value}' to non-nullable enum {column.EnumType}.");
+    //
+    //             case EnumParseFailureMode.SetDefaultValue:
+    //                 return Enum.GetValues(column.EnumType).GetValue(0);
+    //         }
+    //     }
+    //
+    //     if (column.IsJsonType)
+    //     {
+    //         if (value is string json && !string.IsNullOrWhiteSpace(json))
+    //         {
+    //             return JsonSerializer.Deserialize(json, propertyType, column.JsonSerializerOptions); 
+    //         }
+    //
+    //         throw new ArgumentException($"Cannot deserialize JSON value '{value}' to type {propertyType}.");
+    //     }
+    //
+    //     // DateTime coercion
+    //     if (dbFieldType == typeof(string) && propertyType == typeof(DateTime) && value is string s)
+    //         return DateTime.Parse(s);
+    //
+    //     // Guid coercion
+    //     if (propertyType == typeof(Guid))
+    //     {
+    //         if (value is string guidStr && Guid.TryParse(guidStr, out var guid))
+    //             return guid;
+    //         if (value is byte[] bytes && bytes.Length == 16)
+    //             return new Guid(bytes);
+    //     }
+    //
+    //     // Future: handle decimal to int64 for Oracle or other quirks
+    //     try
+    //     {
+    //         var targetType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+    //         return Convert.ChangeType(value, targetType);
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         if (EnumParseBehavior == EnumParseFailureMode.Throw)
+    //             throw new InvalidCastException($"Failed to convert value '{value}' to {propertyType}", ex);
+    //     }
+    //
+    //     // Fallback — no conversion
+    //     return value;
+    // }
 
     public Task<T?> RetrieveOneAsync(T objectToUpdate, IDatabaseContext? context = null)
     {
@@ -222,10 +176,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     public async Task<T?> LoadSingleAsync(ISqlContainer sc)
     {
         await using var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
-        if (await reader.ReadAsync().ConfigureAwait(false))
-        {
-            return MapReaderToObject(reader);
-        }
+        if (await reader.ReadAsync().ConfigureAwait(false)) return MapReaderToObject(reader);
 
         return null;
     }
@@ -235,10 +186,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var list = new List<T>();
         var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
 
-        while (await reader.ReadAsync().ConfigureAwait(false))
-        {
-            list.Add(MapReaderToObject(reader));
-        }
+        while (await reader.ReadAsync().ConfigureAwait(false)) list.Add(MapReaderToObject(reader));
 
         return list;
     }
@@ -268,12 +216,12 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             var p = _context.CreateDbParameter(paramName,
                 column.DbType,
                 value
-                );
-           
+            );
+
             columns.Append(_context.WrapObjectName(column.Name));
             if (Utils.IsNullOrDbNull(value))
             {
-                values.Append($"NULL");
+                values.Append("NULL");
             }
             else
             {
@@ -298,41 +246,38 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     {
         context ??= _context;
         var wrappedAlias = "";
-        if (!String.IsNullOrWhiteSpace(alias))
-        {
+        if (!string.IsNullOrWhiteSpace(alias))
             wrappedAlias = context.WrapObjectName(alias) +
                            context.DataSourceInfo.CompositeIdentifierSeparator;
-        }
 
         var sc = new SqlContainer(context);
         var sb = sc.Query;
         sb.Append("SELECT ");
-        sb.Append(string.Join(", ", _tableInfo.Columns.Values.Select(col => string.Format("{0}{1}", 
-            wrappedAlias, 
-             context.WrapObjectName(col.Name)))));
+        sb.Append(string.Join(", ", _tableInfo.Columns.Values.Select(col => string.Format("{0}{1}",
+            wrappedAlias,
+            context.WrapObjectName(col.Name)))));
         sb.Append(" FROM ").Append(WrappedWrappedTableName);
         sb.Append(" " + wrappedAlias.Substring(0, wrappedAlias.Length - 1));
-         
+
         return sc;
     }
 
-    public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null, String alias = "a")
+    public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null,
+        string alias = "a")
     {
         context ??= _context;
         var sc = BuildBaseRetrieve(alias, context);
         var wrappedAlias = "";
-        if (!String.IsNullOrWhiteSpace(alias))
-        {
+        if (!string.IsNullOrWhiteSpace(alias))
             wrappedAlias = context.WrapObjectName(alias) +
                            context.DataSourceInfo.CompositeIdentifierSeparator;
-        }
 
         var wrappedColumnName = wrappedAlias +
                                 _context.WrapObjectName(_idColumn.Name);
         BuildWhere(
             wrappedColumnName,
             listOfIds,
-            sc, 
+            sc,
             context);
 
         return sc;
@@ -365,12 +310,10 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         foreach (var column in _tableInfo.Columns.Values)
         {
             if (column.IsId || column.IsVersion || column.IsNonUpdateable)
-            {
                 //Skip columns that should never be directly updated
                 //the version column, rowId and columns we have marked 
                 //as non-updateable
                 continue;
-            }
 
             var newValue = column.MakeParameterValueFromField(objectToUpdate);
             var originalValue = loadOriginal ? column.MakeParameterValueFromField(original) : null;
@@ -394,12 +337,10 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         }
 
         if (_versionColumn != null)
-        {
             //this should be updated to wrap other patterns.
             setClause.Append(
                 $", {_context.WrapObjectName(_versionColumn.Name)} = {_context.WrapObjectName(_versionColumn.Name)} + 1");
-        }
-    
+
         if (setClause.Length == 0)
             throw new InvalidOperationException("No changes detected for update.");
 
@@ -441,7 +382,8 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var sc = new SqlContainer(context);
 
         var idCol = _idColumn;
-        if (idCol == null) throw new InvalidOperationException($"row identity column for table {WrappedWrappedTableName} not found");
+        if (idCol == null)
+            throw new InvalidOperationException($"row identity column for table {WrappedWrappedTableName} not found");
 
         var p = _context.CreateDbParameter("id", idCol.DbType, id);
         sc.AppendParameters(p);
@@ -463,35 +405,27 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return sc;
     }
 
-    
+
     private ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TID> ids, ISqlContainer sqlContainer,
         IDatabaseContext context)
     {
         var enumerable = ids?.Distinct().ToList();
-        if (enumerable == null || enumerable.Count == 0)
-        {
-            return sqlContainer;
-        }
+        if (enumerable == null || enumerable.Count == 0) return sqlContainer;
 
-        
+
         var hasNull = enumerable.Any(v => Utils.IsNullOrDbNull(v));
         var sb = new StringBuilder();
         var dbType = _idColumn!.DbType;
         var idx = 0;
         foreach (var id in enumerable)
-        {
             if (!hasNull || !Utils.IsNullOrDbNull(id))
             {
-                if (sb.Length > 0)
-                {
-                    sb.Append(", ");
-                }
+                if (sb.Length > 0) sb.Append(", ");
 
                 var p = sqlContainer.AppendParameter($"p{idx++}", dbType, id);
                 var name = MakeParameterName(p);
                 sb.Append(name);
             }
-        }
 
         if (sb.Length > 0)
         {

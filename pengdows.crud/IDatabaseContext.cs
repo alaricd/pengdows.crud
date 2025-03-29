@@ -9,6 +9,9 @@ public interface IDatabaseContext : IDisposable
     ITypeMapRegistry TypeMapRegistry { get; }
     IDataSourceInformation DataSourceInfo { get; }
     string MissingSqlSettings { get; }
+    ProcWrappingStyle ProcWrappingStyle { get; }
+    int MaxParameterLimit { get; }
+    long NumberOfOpenConnections { get; }
     ISqlContainer CreateSqlContainer(string? query = null);
     DbParameter CreateDbParameter<T>(string name, DbType type, T value);
     DbConnection GetConnection(ExecutionType executionType);
@@ -16,8 +19,8 @@ public interface IDatabaseContext : IDisposable
     TransactionContext BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted);
     string GenerateRandomName(int length = 8);
     DbParameter CreateDbParameter<T>(DbType type, T value);
-     
-   void AssertIsReadConnection();
-   void AssertIsWriteConnection();
-   void CloseAndDisposeConnection(DbConnection connection);
+
+    void AssertIsReadConnection();
+    void AssertIsWriteConnection();
+    void CloseAndDisposeConnection(DbConnection connection);
 }

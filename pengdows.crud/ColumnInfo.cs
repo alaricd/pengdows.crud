@@ -1,5 +1,6 @@
 using System.Data;
 using System.Reflection;
+using System.Text.Json;
 
 namespace pengdows.crud;
 
@@ -13,18 +14,20 @@ public class ColumnInfo
     public bool IsNonUpdateable { get; set; }
     public bool IsEnum { get; set; }
     public Type? EnumType { get; set; }
+    public bool IsJsonType { get; set; }
+    public JsonSerializerOptions JsonSerializerOptions { get; set; } = JsonSerializerOptions.Default;
 
-    public object? MakeParameterValueFromField<T>(T objectToCreate) 
+    public object? MakeParameterValueFromField<T>(T objectToCreate)
     {
-        var value = this.PropertyInfo.GetValue(objectToCreate);
+        var value = PropertyInfo.GetValue(objectToCreate);
         if (value != null)
-        { 
-            if (this.EnumType != null)
-            {
-                value = this.DbType == DbType.String
+        {
+            if (EnumType != null)
+                value = DbType == DbType.String
                     ? value.ToString() // Save enum as string name
-                    : Convert.ChangeType(value, Enum.GetUnderlyingType(this.EnumType)); // Save enum as int
-            }
+                    : Convert.ChangeType(value, Enum.GetUnderlyingType(EnumType)); // Save enum as int
+
+            if (IsJsonType) value = JsonSerializer.Serialize(value);
         }
 
         return value;

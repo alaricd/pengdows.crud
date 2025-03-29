@@ -31,6 +31,14 @@ public class TransactionContext : ITransactionContext
     }
 
 
+    public long NumberOfOpenConnections
+    {
+        get
+        {
+            return _context.NumberOfOpenConnections;
+        }
+    }
+
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
         if (IsCompleted)
@@ -84,6 +92,10 @@ public class TransactionContext : ITransactionContext
         _context.CloseAndDisposeConnection(connection);
     }
 
+    public ProcWrappingStyle ProcWrappingStyle => _context.DataSourceInfo.ProcWrappingStyle;
+
+
+    public int MaxParameterLimit => _context.DataSourceInfo.MaxParameterLimit;
 
     public DbMode ConnectionMode => DbMode.SingleConnection;
 
@@ -103,7 +115,7 @@ public class TransactionContext : ITransactionContext
         finally
         {
             _isCompleted = true;
-           _context.CloseAndDisposeConnection(_connection);
+            _context.CloseAndDisposeConnection(_connection);
         }
     }
 

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace pengdows.crud;
 
-public interface ISqlContainer
+public interface ISqlContainer : IDisposable
 {
     StringBuilder Query { get; }
 
@@ -14,4 +14,6 @@ public interface ISqlContainer
     Task<int> ExecuteNonQueryAsync(CommandType commandType = CommandType.Text);
     Task<T?> ExecuteScalarAsync<T>(CommandType commandType = CommandType.Text);
     Task<DbDataReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text);
+    DbCommand CreateCommand(DbConnection conn);
+    void Clear();
 }

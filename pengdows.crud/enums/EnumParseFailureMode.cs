@@ -6,5 +6,3 @@ public enum EnumParseFailureMode
     SetNullAndLog,
     SetDefaultValue // Optional
 }
-
-

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.RegularExpressions;
 
 namespace pengdows.crud;
@@ -14,4 +15,7 @@ public interface IDataSourceInformation
     string DatabaseProductVersion { get; }
     string CompositeIdentifierSeparator { get; }
     bool PrepareStatements { get; }
+    ProcWrappingStyle ProcWrappingStyle { get; }
+    int MaxParameterLimit { get; }
+    string GetDatabaseVersion(DbConnection dbConnection);
 }

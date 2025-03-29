@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Text.Json;
 using pengdows.crud.attributes;
 
 namespace pengdows.crud;
@@ -33,7 +34,10 @@ public class TypeMapRegistry : ITypeMapRegistry
                         IsNonUpdateable = prop.GetCustomAttribute<NonUpdateableAttribute>() != null,
                         IsId = prop.GetCustomAttribute<IdAttribute>() != null,
                         IsEnum = prop.GetCustomAttribute<EnumColumnAttribute>() != null,
-                        EnumType = prop.GetCustomAttribute<EnumColumnAttribute>()?.EnumType
+                        EnumType = prop.GetCustomAttribute<EnumColumnAttribute>()?.EnumType,
+                        IsJsonType = prop.GetCustomAttribute<JsonAttribute>() != null,
+                        JsonSerializerOptions = prop.GetCustomAttribute<JsonAttribute>()?.SerializerOptions ??
+                                                JsonSerializerOptions.Default
                     };
             }
 
