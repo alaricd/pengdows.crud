@@ -1,10 +1,17 @@
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
 
-namespace testbest;
+namespace testbed;
 
 public class OracleTestProvider(DatabaseContext oracleDb) : TestProvider(oracleDb)
 {
+    // public override async Task CountTestRows(DatabaseContext context, EntityHelper<TestTable, int> helper)
+    // {
+    //     var sc = context.CreateSqlContainer();
+    //     sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", helper.WrappedWrappedTableName);
+    //     var count =await  sc.ExecuteScalarAsync<decimal>();
+    //     Console.WriteLine($"Count: {count}");
+    // }
     public override async Task CreateTable(DatabaseContext databaseContext)
     {
         var sqlContainer = databaseContext.CreateSqlContainer();

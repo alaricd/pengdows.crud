@@ -1,7 +1,7 @@
 using System.Data;
 using pengdows.crud.attributes;
 
-namespace testbest;
+namespace testbed;
 
 [Table("test_table")]
 public class TestTable
@@ -14,7 +14,6 @@ public class TestTable
 
     [Column("created_at", DbType.DateTime)]
     public DateTime CreatedAt { get; set; }
-    
 }
 
 public enum NameEnum

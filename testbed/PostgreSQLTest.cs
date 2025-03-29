@@ -1,8 +1,8 @@
 using pengdows.crud;
 
-namespace testbest;
+namespace testbed;
 
-public class PostgreSQLTest (DatabaseContext context) : TestProvider(context)
+public class PostgreSQLTest(DatabaseContext context) : TestProvider(context)
 {
     public override async Task CreateTable(DatabaseContext databaseContext)
 

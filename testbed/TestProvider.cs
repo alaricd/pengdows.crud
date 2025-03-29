@@ -1,6 +1,6 @@
 using pengdows.crud;
 
-namespace testbest;
+namespace testbed;
 
 public class TestProvider
 {
@@ -27,11 +27,11 @@ public class TestProvider
         Console.WriteLine("Completed testing of provider");
     }
 
-    private async Task CountTestRows(DatabaseContext context, EntityHelper<TestTable, int> helper)
+    public virtual async Task CountTestRows(DatabaseContext context, EntityHelper<TestTable, int> helper)
     {
         var sc = _context.CreateSqlContainer();
         sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", helper.WrappedWrappedTableName);
-        int count =await  sc.ExecuteScalarAsync<int>();
+        var count = await sc.ExecuteScalarAsync<int>();
         Console.WriteLine($"Count: {count}");
     }
 
@@ -41,7 +41,10 @@ public class TestProvider
         var qp = databaseContext.DataSourceInfo.QuotePrefix;
         var qs = databaseContext.DataSourceInfo.QuoteSuffix;
         sqlContainer.Query.AppendFormat(@"DROP TABLE IF EXISTS {0}test_table{1}", qp, qs);
-        try{await sqlContainer.ExecuteNonQueryAsync();}
+        try
+        {
+            await sqlContainer.ExecuteNonQueryAsync();
+        }
         catch (Exception ex) //when (ex.Number == 942)
         {
             // Table did not exist, ignore
