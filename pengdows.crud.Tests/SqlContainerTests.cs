@@ -62,7 +62,7 @@ public class SqlContainerTests : IDisposable
     [Fact]
     public async Task ExecuteNonQueryAsync_InsertsData()
     {
-        AssertPropertNumerOfConnectionsForMode()
+        AssertProperNumberOfConnectionsForMode()
         var container = await BuildTestTable();
         container.Query.Append("INSERT INTO Test (Name) VALUES (@name)");
         container.AppendParameter("@name", DbType.String, "TestName");
@@ -76,7 +76,7 @@ public class SqlContainerTests : IDisposable
     public async Task ExecuteScalarAsync_ReturnsValue_WhenRowExists()
     {
         var container = await BuildTestTable();
-        AssertPropertNumerOfConnectionsForMode()
+        AssertProperNumberOfConnectionsForMode()
         container.Query.Append("INSERT INTO Test (Name) VALUES (@name)");
         container.AppendParameter("name", DbType.String, "TestName");
         await container.ExecuteNonQueryAsync(CommandType.Text);
@@ -95,10 +95,10 @@ public class SqlContainerTests : IDisposable
         container.Query.Append("SELECT Name FROM Test WHERE Id = 1");
 
         await Assert.ThrowsAsync<Exception>(() => container.ExecuteScalarAsync<string>());
-        AssertPropertNumerOfConnectionsForMode();
+        AssertProperNumberOfConnectionsForMode();
     }
 
-    private void AssertPropertNumerOfConnectionsForMode()
+    private void AssertProperNumberOfConnectionsForMode()
     {
         switch (_context.ConnectionMode)
         {
