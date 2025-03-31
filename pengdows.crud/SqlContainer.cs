@@ -42,6 +42,7 @@ public class SqlContainer : ISqlContainer
         {
             conn = _context.GetConnection(ExecutionType.Write);
             cmd = PrepareCommand(conn, commandType, ExecutionType.Write);
+            
             return await cmd.ExecuteNonQueryAsync();
         }
         finally
@@ -189,7 +190,7 @@ public class SqlContainer : ISqlContainer
                 cmd.Connection = null;
                 cmd.Dispose();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 cmd.Disposed += (_, __) =>
                 {
@@ -214,7 +215,11 @@ public class SqlContainer : ISqlContainer
         if (executionType == ExecutionType.Read)
             //leave the connection open for reads until we dispose them.
             return;
-        if (!(_context is TransactionContext)) _context.CloseAndDisposeConnection(conn);
+        if (!(_context is TransactionContext)) //  && executionType == ExecutionType.Write) 
+        {
+            _context.CloseAndDisposeConnection(conn);
+        }
+      
     }
 
     private void Dispose(bool disposing)

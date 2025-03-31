@@ -1,42 +1,46 @@
+using System.Data;
 using pengdows.crud;
 
 namespace testbed;
 
-public class TestProvider
+public class TestProvider:IAsyncTestProvider
 {
-    private readonly DatabaseContext _context;
-    private readonly EntityHelper<TestTable, int> _helper;
+    private readonly IDatabaseContext _context;
+    private readonly EntityHelper<TestTable, long> _helper;
+    
 
-    public TestProvider(DatabaseContext databaseContext)
+    public TestProvider(IDatabaseContext databaseContext, IServiceProvider serviceProvider)
     {
         _context = databaseContext;
-        _helper = new EntityHelper<TestTable, int>(databaseContext);
+        _helper = new EntityHelper<TestTable, long>(databaseContext, serviceProvider);
     }
 
 
     public async Task RunTest()
     {
-        await CreateTable(_context);
+        await CreateTable();
 
-        await InsertTestRows(_context, _helper);
-        await CountTestRows(_context, _helper);
-        var obj = await RetrieveRows(_context, _helper);
-
-
-        await DeletedRow(_context, _helper);
-        Console.WriteLine("Completed testing of provider");
+        await InsertTestRows();
+        await CountTestRows();
+        var obj = await RetrieveRows();
+      
+        await DeletedRow(obj);
+        Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.DatabaseProductName);
     }
 
-    public virtual async Task CountTestRows(DatabaseContext context, EntityHelper<TestTable, int> helper)
+    public virtual async Task CountTestRows()
     {
+        var context = _context;
+
         var sc = _context.CreateSqlContainer();
-        sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", helper.WrappedWrappedTableName);
+        sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", _helper.WrappedWrappedTableName);
         var count = await sc.ExecuteScalarAsync<int>();
         Console.WriteLine($"Count: {count}");
     }
 
-    public virtual async Task CreateTable(DatabaseContext databaseContext)
+    public virtual async Task CreateTable()
     {
+        var databaseContext = _context;
         var sqlContainer = databaseContext.CreateSqlContainer();
         var qp = databaseContext.DataSourceInfo.QuotePrefix;
         var qs = databaseContext.DataSourceInfo.QuoteSuffix;
@@ -53,9 +57,14 @@ public class TestProvider
         sqlContainer.Query.Clear();
         sqlContainer.Query.AppendFormat(@"
 CREATE TABLE {0}test_table{1} (
-    {0}id{1} BIGINT ,
+    {0}id{1} BIGINT  NOT NULL UNIQUE, 
     {0}name{1} VARCHAR(100) NOT NULL,
-    {0}created_at{1} DATETIME 
+    {0}description{1} VARCHAR(1000) NOT NULL,
+    {0}created_at{1} DATETIME NOT NULL,
+    {0}created_by{1} VARCHAR(100) NOT NULL,
+    {0}updated_at{1} DATETIME NOT NULL,
+    {0}updated_by{1} VARCHAR(100) NOT NULL
+    
 ); ", qp, qs);
         try
         {
@@ -78,31 +87,31 @@ CREATE TABLE {0}test_table{1} (
         }
     }
 
-    private async Task InsertTestRows(DatabaseContext databaseContext, IEntityHelper<TestTable, int> helper)
+    private async Task InsertTestRows()
     {
         var t = new TestTable
         {
             Id = 1,
             Name = NameEnum.Test,
-            CreatedAt = DateTime.UtcNow
+            Description = "Test Description"
         };
-        var sq = helper.BuildCreate(t);
+        var sq = _helper.BuildCreate(t);
         await sq.ExecuteNonQueryAsync();
     }
 
-    private async Task<TestTable> RetrieveRows(DatabaseContext databaseContext, IEntityHelper<TestTable, int> helper)
+    private async Task<TestTable> RetrieveRows( )
     {
-        var sc = helper.BuildRetrieve([1]);
+        var sc = _helper.BuildRetrieve([1]);
 
         Console.WriteLine(sc.Query.ToString());
 
-        var x = await helper.LoadSingleAsync(sc);
+        var x = await _helper.LoadSingleAsync(sc);
         return x;
     }
 
-    private async Task DeletedRow(DatabaseContext databaseContext, EntityHelper<TestTable, int> entityHelper)
+    private async Task DeletedRow(TestTable t)
     {
-        var sc = _helper.BuildDelete(1);
+        var sc = _helper.BuildDelete(t.Id);
         var count = await sc.ExecuteNonQueryAsync();
         if (count != 1) throw new Exception("Delete failed");
     }

@@ -1,6 +1,7 @@
 using System.Data;
 using System.Reflection;
 using System.Text.Json;
+using pengdows.crud.attributes;
 
 namespace pengdows.crud;
 
@@ -16,6 +17,13 @@ public class ColumnInfo
     public Type? EnumType { get; set; }
     public bool IsJsonType { get; set; }
     public JsonSerializerOptions JsonSerializerOptions { get; set; } = JsonSerializerOptions.Default;
+    public bool IsIdIsWritable { get; set; }
+    public bool IsPrimaryKey { get; set; } = false;
+    public bool IsVersionColumn { get; set; }
+    public bool IsCreatedBy { get; set; }
+    public bool IsCreatedOn { get; set; }
+    public bool IsLastUpdatedBy { get; set; }
+    public bool IsLastUpdatedOn { get; set; }
 
     public object? MakeParameterValueFromField<T>(T objectToCreate)
     {

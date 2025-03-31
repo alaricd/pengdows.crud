@@ -3,6 +3,8 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using pengdows.crud.attributes;
 using pengdows.crud.enums;
 
 namespace pengdows.crud;
@@ -15,24 +17,34 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     private readonly ColumnInfo? _idColumn;
     private readonly string _parameterMarker;
     private readonly TableInfo _tableInfo;
-    private readonly ITypeMapRegistry _typeMap;
     private readonly bool _usePositionalParameters;
 
     private readonly ColumnInfo? _versionColumn;
-
-    public EntityHelper(IDatabaseContext databaseContext,
-        EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw) :
-        this(databaseContext, databaseContext.TypeMapRegistry)
-    {
-    }
-
-    public EntityHelper(IDatabaseContext databaseContext, ITypeMapRegistry typeMap,
-        EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw)
+    private Type _userFieldType = null;
+    private readonly IServiceProvider _serviceProvider;
+   
+    public EntityHelper(IDatabaseContext databaseContext,   
+        IServiceProvider serviceProvider,
+        EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
+      )
     {
         _context = databaseContext;
-        _typeMap = typeMap;
-        _tableInfo = _typeMap.GetTableInfo<T>() ??
+        _serviceProvider = serviceProvider;
+        var typemap = serviceProvider?.GetService<ITypeMapRegistry>() ?? new TypeMapRegistry();
+        
+        _tableInfo = typemap.GetTableInfo<T>() ??
                      throw new InvalidOperationException($"Type {typeof(T).FullName} is not a table.");
+        var propertyInfoPropertyType = _tableInfo.Columns
+            .Values
+            .FirstOrDefault(c =>
+                c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
+                c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
+            )?.PropertyInfo.PropertyType;
+        if (propertyInfoPropertyType != null && _serviceProvider != null)
+        {
+            _userFieldType = propertyInfoPropertyType;
+        }
+
         _parameterMarker = _context.DataSourceInfo.ParameterMarker;
         _usePositionalParameters = _context.DataSourceInfo.ParameterMarker == "?";
 
@@ -96,74 +108,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
         return obj;
     }
-    //
-    // private object? CoerceData(object? value, Type dbFieldType, Type propertyType, ColumnInfo column)
-    // {
-    //     if (value == null) return null;
-    //
-    //     // No coercion needed if types match
-    //     if (dbFieldType == propertyType)
-    //         return value;
-    //
-    //     // Enum coercion
-    //     if (column.EnumType != null)
-    //     {
-    //         if (Enum.TryParse(column.EnumType, value.ToString(), true, out var result))
-    //             return result;
-    //
-    //         switch (EnumParseBehavior)
-    //         {
-    //             case EnumParseFailureMode.Throw:
-    //                 throw new ArgumentException($"Cannot convert value '{value}' to enum {column.EnumType}.");
-    //
-    //             case EnumParseFailureMode.SetNullAndLog:
-    //                 if (Nullable.GetUnderlyingType(propertyType) == column.EnumType)
-    //                     return null;
-    //                 throw new ArgumentException($"Cannot convert '{value}' to non-nullable enum {column.EnumType}.");
-    //
-    //             case EnumParseFailureMode.SetDefaultValue:
-    //                 return Enum.GetValues(column.EnumType).GetValue(0);
-    //         }
-    //     }
-    //
-    //     if (column.IsJsonType)
-    //     {
-    //         if (value is string json && !string.IsNullOrWhiteSpace(json))
-    //         {
-    //             return JsonSerializer.Deserialize(json, propertyType, column.JsonSerializerOptions); 
-    //         }
-    //
-    //         throw new ArgumentException($"Cannot deserialize JSON value '{value}' to type {propertyType}.");
-    //     }
-    //
-    //     // DateTime coercion
-    //     if (dbFieldType == typeof(string) && propertyType == typeof(DateTime) && value is string s)
-    //         return DateTime.Parse(s);
-    //
-    //     // Guid coercion
-    //     if (propertyType == typeof(Guid))
-    //     {
-    //         if (value is string guidStr && Guid.TryParse(guidStr, out var guid))
-    //             return guid;
-    //         if (value is byte[] bytes && bytes.Length == 16)
-    //             return new Guid(bytes);
-    //     }
-    //
-    //     // Future: handle decimal to int64 for Oracle or other quirks
-    //     try
-    //     {
-    //         var targetType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-    //         return Convert.ChangeType(value, targetType);
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         if (EnumParseBehavior == EnumParseFailureMode.Throw)
-    //             throw new InvalidCastException($"Failed to convert value '{value}' to {propertyType}", ex);
-    //     }
-    //
-    //     // Fallback — no conversion
-    //     return value;
-    // }
+    
 
     public Task<T?> RetrieveOneAsync(T objectToUpdate, IDatabaseContext? context = null)
     {
@@ -202,9 +147,14 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var parameters = new List<DbParameter>();
         var pid = 0;
         var sc = new SqlContainer(context);
-
+        SetAuditFields(objectToCreate, false);
         foreach (var column in _tableInfo.Columns.Values)
         {
+            if (column.IsId && !column.IsIdIsWritable)
+            {
+                continue;
+            }
+           
             if (columns.Length > 0)
             {
                 columns.Append(", ");
@@ -240,6 +190,61 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
         sc.AppendParameters(parameters);
         return sc;
+    }
+
+   
+    private void SetAuditFields(T obj, bool updateOnly)
+    {
+        if (_userFieldType == null || _serviceProvider == null || obj == null)
+            return;
+
+        var (userId, now) = AuditFieldResolver.ResolveFrom(_userFieldType, _serviceProvider);
+
+        // Always update last-modified
+        _tableInfo.LastUpdatedBy?.PropertyInfo?.SetValue(obj, userId);
+        _tableInfo.LastUpdatedOn?.PropertyInfo?.SetValue(obj, now);
+
+        if (updateOnly) return;
+
+        // Only set Created fields if they are null or default
+        if (_tableInfo.CreatedBy?.PropertyInfo != null)
+        {
+            var currentValue = _tableInfo.CreatedBy.PropertyInfo.GetValue(obj);
+            if (currentValue == null
+                || currentValue as string == string.Empty
+                || IsZeroNumeric(currentValue))
+            {
+                _tableInfo.CreatedBy.PropertyInfo.SetValue(obj, userId);
+            }
+        }
+
+        if (_tableInfo.CreatedOn?.PropertyInfo != null)
+        {
+            var currentValue = _tableInfo.CreatedOn.PropertyInfo.GetValue(obj) as DateTime?;
+            if (currentValue == null || currentValue == default(DateTime))
+            {
+                _tableInfo.CreatedOn.PropertyInfo.SetValue(obj, now);
+            }
+        }
+    }
+
+    private static bool IsZeroNumeric(object value)
+    {
+        return value switch
+        {
+            byte b => b == 0,
+            sbyte sb => sb == 0,
+            short s => s == 0,
+            ushort us => us == 0,
+            int i => i == 0,
+            uint ui => ui == 0,
+            long l => l == 0,
+            ulong ul => ul == 0,
+            float f => f == 0f,
+            double d => d == 0d,
+            decimal m => m == 0m,
+            _ => false
+        };
     }
 
     public ISqlContainer BuildBaseRetrieve(string alias, IDatabaseContext? context = null)
@@ -297,6 +302,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         context ??= _context;
         var setClause = new StringBuilder();
         var parameters = new List<DbParameter>();
+        SetAuditFields(objectToUpdate, true);
         var sc = new SqlContainer(context);
         var original = null as T;
 

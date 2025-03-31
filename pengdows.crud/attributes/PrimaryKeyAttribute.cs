@@ -1,6 +1,7 @@
 namespace pengdows.crud.attributes;
 
 [AttributeUsage(AttributeTargets.Property)]
-public class LastUpdateByAttribute : Attribute
+public sealed class PrimaryKeyAttribute : Attribute
 {
+   
 }

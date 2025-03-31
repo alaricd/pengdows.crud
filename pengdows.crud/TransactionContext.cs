@@ -89,7 +89,7 @@ public class TransactionContext : ITransactionContext
 
     public void CloseAndDisposeConnection(DbConnection connection)
     {
-        _context.CloseAndDisposeConnection(connection);
+     //   _context.CloseAndDisposeConnection(connection);
     }
 
     public ProcWrappingStyle ProcWrappingStyle => _context.DataSourceInfo.ProcWrappingStyle;

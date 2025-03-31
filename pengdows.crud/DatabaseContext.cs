@@ -18,6 +18,8 @@ public class DatabaseContext : IDatabaseContext
     private bool _isSqlServer;
     private string _missingSqlSettings;
 
+    public string Name { get; set; }
+
     public DatabaseContext(string connectionString, DbProviderFactory factory, ITypeMapRegistry typeMapRegistry,
         DbMode mode = DbMode.Standard)
     {
@@ -43,7 +45,7 @@ public class DatabaseContext : IDatabaseContext
                                        throw new ObjectDisposedException(
                                            "attempt to use single connection from the wrong mode.");
 
-    public DbMode ConnectionMode { get; }
+    public DbMode ConnectionMode { get; private set; }
 
     public ITypeMapRegistry TypeMapRegistry { get; }
 
@@ -97,7 +99,10 @@ public class DatabaseContext : IDatabaseContext
         p.ParameterName = name;
         p.DbType = type;
         p.Value = valueIsNull ? DBNull.Value : value;
-        if (!valueIsNull && p.DbType == DbType.String && value is string s) p.Size = Math.Max(s.Length, 1);
+        if (!valueIsNull && p.DbType == DbType.String && value is string s)
+        {
+            p.Size = Math.Max(s.Length, 1);
+        }
 
         return p;
     }
@@ -181,9 +186,32 @@ public class DatabaseContext : IDatabaseContext
 
     public void CloseAndDisposeConnection(DbConnection connection)
     {
-        if (connection == null) return;
+        if (connection == null)
+        {
+            return;
+        }
 
-        if (_connection != connection) connection?.Dispose();
+        Console.WriteLine($"Connection mode is: {ConnectionMode}");
+        switch (ConnectionMode)
+        {   
+            case DbMode.SingleConnection:
+            case DbMode.SqlCe:
+                if (_connection != connection)
+                {         
+                    //never close our single write connection
+                    Console.WriteLine("Not our single connection, closing");    
+                    connection.Dispose();
+                }
+
+                break;
+            case DbMode.Standard:
+            case DbMode.SqlExpressUserMode:
+                Console.WriteLine("Closing a standard connection");
+                connection.Dispose();
+                break;
+            default:
+                throw new NotSupportedException("Unsupported connection mode.");
+        }
     }
 
     public ProcWrappingStyle ProcWrappingStyle => _dataSourceInfo.ProcWrappingStyle;
@@ -271,6 +299,14 @@ public class DatabaseContext : IDatabaseContext
             _dataSourceInfo = new DataSourceInformation(conn);
             CheckForSqlServerSettings(conn);
             ConnectionString = csb.ConnectionString;
+            this.Name = _dataSourceInfo.DatabaseProductName;
+            if ("Data Source=:memory:" == ConnectionString)
+            {
+                //sqlite memory mode
+                ConnectionMode = DbMode.SingleConnection;
+                mode = ConnectionMode;
+            }
+
             if (mode != DbMode.Standard)
                 // if the mode is anything but standard
                 // we store it as our minimal connection
@@ -301,15 +337,21 @@ public class DatabaseContext : IDatabaseContext
         {
             switch (args.CurrentState)
             {
+                case ConnectionState.Broken:
+                    Interlocked.Decrement(ref _connectionCount);
+                    break;
                 case ConnectionState.Open:
                     Interlocked.Increment(ref _connectionCount);
                     break;
                 case ConnectionState.Closed:
                     Interlocked.Decrement(ref _connectionCount);
                     break;
+                default:
+                    // not important for this 
+                    break;
             }
 
-            Console.WriteLine("Number of open connections:{0}", _connectionCount);
+            Console.WriteLine("{1} now has open connections:{0}", _connectionCount, Name);
         };
     }
 
