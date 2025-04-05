@@ -6,7 +6,7 @@ using DotNet.Testcontainers.Builders;
 
 namespace testbed;
 
-public class PostgreSqlTestContainer : TestContainer
+public class PostgreSqlTestContainer : TestContainer  
 {
     private readonly TestcontainersContainer _container;
     private string? _connectionString;

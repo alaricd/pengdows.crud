@@ -162,6 +162,7 @@ public class SqlContainer : ISqlContainer
         OpenConnection(conn);
         var cmd = CreateCommand(conn);
         cmd.CommandType = CommandType.Text;
+        Console.WriteLine(Query);
         cmd.CommandText = _context.MissingSqlSettings +
                           (commandType == CommandType.StoredProcedure ? WrapForStoredProc(executionType) : Query);
         if (_parameters.Count > _context.MaxParameterLimit)
@@ -219,7 +220,11 @@ public class SqlContainer : ISqlContainer
         {
             _context.CloseAndDisposeConnection(conn);
         }
-      
+    }
+
+    public string WrapObjectName(string objectName)
+    {
+        return _context.WrapObjectName(objectName);
     }
 
     private void Dispose(bool disposing)

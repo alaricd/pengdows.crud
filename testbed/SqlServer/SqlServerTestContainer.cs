@@ -8,7 +8,7 @@ using pengdows.crud;
 
 namespace testbed;
 
-public class SqlServerTestContainer : TestContainer
+public class SqlServerTestContainer: TestContainer
 {
     private readonly TestcontainersContainer _container;
     private string? _connectionString;

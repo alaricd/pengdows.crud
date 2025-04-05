@@ -17,5 +17,8 @@ public interface IDataSourceInformation
     bool PrepareStatements { get; }
     ProcWrappingStyle ProcWrappingStyle { get; }
     int MaxParameterLimit { get; }
+    SupportedDatabase Product { get; }
+    bool SupportsMerge { get; }
+    bool SupportsInsertOnConflict { get; }
     string GetDatabaseVersion(DbConnection dbConnection);
 }

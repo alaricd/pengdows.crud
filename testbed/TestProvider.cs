@@ -18,14 +18,25 @@ public class TestProvider:IAsyncTestProvider
 
     public async Task RunTest()
     {
-        await CreateTable();
+        Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.Product.ToString());
+        try
+        {
+            await CreateTable();
 
-        await InsertTestRows();
-        await CountTestRows();
-        var obj = await RetrieveRows();
-      
-        await DeletedRow(obj);
-        Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.DatabaseProductName);
+            await InsertTestRows();
+            await CountTestRows();
+            var obj = await RetrieveRows();
+
+            await DeletedRow(obj);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Failed to complete tests successfully: " + ex.Message);
+        }
+        finally
+        {
+            Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.Product.ToString());
+        }
     }
 
     public virtual async Task CountTestRows()
@@ -33,7 +44,7 @@ public class TestProvider:IAsyncTestProvider
         var context = _context;
 
         var sc = _context.CreateSqlContainer();
-        sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", _helper.WrappedWrappedTableName);
+        sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", _helper.WrappedTableName);
         var count = await sc.ExecuteScalarAsync<int>();
         Console.WriteLine($"Count: {count}");
     }

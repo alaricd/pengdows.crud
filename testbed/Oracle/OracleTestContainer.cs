@@ -7,7 +7,7 @@ using pengdows.crud;
 
 namespace testbed;
 
-public class OracleTestContainer : TestContainer
+public class OracleTestContainer : TestContainer 
 {
     private readonly TestcontainersContainer _container;
     private string? _connectionString;
@@ -20,11 +20,13 @@ public class OracleTestContainer : TestContainer
     {
         _container = new TestcontainersBuilder<TestcontainersContainer>()
             .WithImage("oracle/database:18.4.0-xe")
+            .WithEnvironment("ACCEPT_LICENSE_AGREEMENT", "Y")
             .WithEnvironment("ORACLE_PWD", _password)
-            .WithPortBinding(_port, true)
+            .WithPortBinding(_port, _port)
             .WithExposedPort(_port)
             .WithWaitStrategy(Wait.ForUnixContainer()
-                .UntilPortIsAvailable(_port)) // Oracle listens on 1521
+                .UntilPortIsAvailable(_port) 
+            )
             .Build();
     }
 
@@ -33,9 +35,9 @@ public class OracleTestContainer : TestContainer
         await _container.StartAsync();
         var hostPort = _container.GetMappedPublicPort(_port);
         _connectionString = // $@"User Id={_username};Password={_password};Data Source=localhost:{hostPort}/{_database};";
-        $@"User Id={_username};Password={_password};Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT={hostPort}))(CONNECT_DATA=(SERVICE_NAME={_database})));";
+            $@"User Id={_username};Password={_password};Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT={hostPort}))(CONNECT_DATA=(SERVICE_NAME={_database})));";
 
-        await base.WaitForDbToStart(OracleClientFactory.Instance, _connectionString,_container,  120);
+        await base.WaitForDbToStart(OracleClientFactory.Instance, _connectionString, _container, 120);
     }
 
     public override async Task<IDatabaseContext> GetDatabaseContextAsync(IServiceProvider services)

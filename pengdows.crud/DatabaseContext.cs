@@ -300,7 +300,8 @@ public class DatabaseContext : IDatabaseContext
             CheckForSqlServerSettings(conn);
             ConnectionString = csb.ConnectionString;
             this.Name = _dataSourceInfo.DatabaseProductName;
-            if ("Data Source=:memory:" == ConnectionString)
+            if (_dataSourceInfo.Product == SupportedDatabase.Sqlite 
+                && "Data Source=:memory:" == ConnectionString)
             {
                 //sqlite memory mode
                 ConnectionMode = DbMode.SingleConnection;
@@ -351,7 +352,8 @@ public class DatabaseContext : IDatabaseContext
                     break;
             }
 
-            Console.WriteLine("{1} now has open connections:{0}", _connectionCount, Name);
+            Console.WriteLine("{1} now has open connections:{0}", _connectionCount , 
+                DataSourceInfo?.Product.ToString() ?? String.Empty);
         };
     }
 

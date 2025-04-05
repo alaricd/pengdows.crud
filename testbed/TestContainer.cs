@@ -1,7 +1,9 @@
 using System.Data.Common;
 using DotNet.Testcontainers.Containers;
+using FirebirdSql.Data.FirebirdClient;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
+using testbed;
 
 namespace testbed;
 
@@ -18,7 +20,7 @@ public abstract class TestContainer : ITestContainer
 
 
         Console.WriteLine($"Running test with container: {this.GetType().Name}");
-        testProvider.RunTest().GetAwaiter().GetResult();
+        await testProvider.RunTest();
     }
 
 
@@ -27,7 +29,7 @@ public abstract class TestContainer : ITestContainer
     public abstract Task<IDatabaseContext> GetDatabaseContextAsync(IServiceProvider services);
 
     protected async Task WaitForDbToStart(DbProviderFactory instance, string connectionString,
-        TestcontainersContainer container, 
+        TestcontainersContainer container,
         int numberOfSecondsToWait = 60)
     {
         var csb = instance.CreateConnectionStringBuilder();
@@ -47,9 +49,44 @@ public abstract class TestContainer : ITestContainer
                 await connection.CloseAsync();
                 return;
             }
-            catch (OracleException ex) 
+            catch (OracleException ex)
             {
-               await Task.Delay(1000);
+                await Task.Delay(1000);
+            }
+            catch (FbException ex) when (ex.Message.Contains("I/O error"))
+            {
+                try
+                {
+                    var orig = csb as FbConnectionStringBuilder
+                               ?? throw new InvalidOperationException("Connection string builder is not valid.");
+
+                    var db = orig.Database;
+                    if (string.IsNullOrWhiteSpace(db))
+                        throw new InvalidOperationException("Database path is not specified.");
+
+                    var csbTemp = new FbConnectionStringBuilder
+                    {
+                        DataSource = orig.DataSource,
+                        Port = orig.Port,
+                        UserID = orig.UserID,
+                        Password = orig.Password,
+                        Charset = orig.Charset,
+                        Pooling = false,
+                    };
+
+                    using var createConn = instance.CreateConnection();
+                    createConn.ConnectionString = csbTemp.ConnectionString;
+                    //var createCmd = new FbCommand($"CREATE DATABASE '{db}';", createConn);
+                    using var createCmd = connection.CreateCommand();
+                    createCmd.CommandText = $"CREATE DATABASE '{db}';";
+
+                    await createConn.OpenAsync();
+                    await createCmd.ExecuteNonQueryAsync();
+                }
+                catch (Exception ex1)
+                {
+                    Console.WriteLine(ex1);
+                }
             }
             catch (Exception ex)
             {
