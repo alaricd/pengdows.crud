@@ -153,7 +153,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var values = new StringBuilder();
         var parameters = new List<DbParameter>();
         var pid = 0;
-        var sc = new SqlContainer(_context);
+        var sc = _context.CreateSqlContainer();
         SetAuditFields(objectToCreate, false);
         foreach (var column in _tableInfo.Columns.Values)
         {
@@ -243,7 +243,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             wrappedAlias = this.WrapObjectName(alias) +
                            _context.DataSourceInfo.CompositeIdentifierSeparator;
 
-        var sc = new SqlContainer(_context);
+        var sc = _context.CreateSqlContainer();
         var sb = sc.Query;
         sb.Append("SELECT ");
         sb.Append(string.Join(", ", _tableInfo.Columns.Values.Select(col => string.Format("{0}{1}",
@@ -385,7 +385,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var setClause = new StringBuilder();
         var parameters = new List<DbParameter>();
         SetAuditFields(objectToUpdate, true);
-        var sc = new SqlContainer(context);
+        var sc = context.CreateSqlContainer();
         var original = null as T;
 
         if (loadOriginal)
@@ -466,7 +466,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
     public ISqlContainer BuildDelete(TID id)
     {
-        var sc = new SqlContainer(_context);
+        var sc = _context.CreateSqlContainer();
 
         var idCol = _idColumn;
         if (idCol == null)

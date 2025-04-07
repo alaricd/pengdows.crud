@@ -29,7 +29,7 @@ public class SqlContainerTests : IDisposable
     [Fact]
     public void Constructor_WithContext_InitializesQueryEmpty()
     {
-        var container = new SqlContainer(_context);
+        var container = _context.CreateSqlContainer();
         Assert.NotNull(container.Query);
         Assert.Equal("", container.Query.ToString());
     }
@@ -41,14 +41,14 @@ public class SqlContainerTests : IDisposable
         var qs = _context.QuoteSuffix;
 
         var query = $"SELECT * FROM {qp}Test{qs}";
-        var container = new SqlContainer(_context, query);
+        var container = _context.CreateSqlContainer(query);
         Assert.Equal(query, container.Query.ToString());
     }
 
     [Fact]
     public void AppendParameter_GeneratesRandomName_WhenNameIsNull()
     {
-        var container = new SqlContainer(_context);
+        var container = _context.CreateSqlContainer();
         var param = container.AppendParameter(null, DbType.String, "test");
         Assert.Equal("test", param.Value);
         Assert.Equal(DbType.String, param.DbType);

@@ -1,6 +1,8 @@
 using System.Data;
 using System.Data.Common;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace pengdows.crud;
 
@@ -10,16 +12,19 @@ public class SqlContainer : ISqlContainer
     private readonly List<DbParameter> _parameters = new();
     private bool _disposed;
 
+    private readonly ILogger<ISqlContainer> _logger;
 
-    public SqlContainer(IDatabaseContext context)
+    internal SqlContainer(IDatabaseContext context, ILogger<ISqlContainer> logger = null)
     {
         _context = context;
+        _logger = logger ?? NullLogger<ISqlContainer>.Instance;
         Query = new StringBuilder("");
     }
 
-    public SqlContainer(IDatabaseContext context, string? query = "")
+    internal SqlContainer(IDatabaseContext context, string? query = "", ILogger<ISqlContainer> logger = null)
     {
         _context = context;
+        _logger = logger ?? NullLogger<ISqlContainer>.Instance;
         Query = new StringBuilder(query);
     }
 
@@ -172,7 +177,7 @@ public class SqlContainer : ISqlContainer
         OpenConnection(conn);
         var cmd = CreateCommand(conn);
         cmd.CommandType = CommandType.Text;
-        Console.WriteLine(Query);
+        _logger.LogInformation(Query.ToString());
         cmd.CommandText = (commandType == CommandType.StoredProcedure)
             ? WrapForStoredProc(executionType)
             : Query.ToString();
@@ -206,7 +211,7 @@ public class SqlContainer : ISqlContainer
             {
                 cmd.Disposed += (_, __) =>
                 {
-                    Console.WriteLine("Disposed Command that couldn't be cleaned up earlier: " +
+                    _logger.LogInformation("Disposed Command that couldn't be cleaned up earlier: " +
                                       _context.DataSourceInfo.DatabaseProductName);
                 };
                 if (conn != null)

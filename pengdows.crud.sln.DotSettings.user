@@ -49,6 +49,9 @@
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=96792e74_002D96d8_002D48ee_002Dae82_002D26294aa29daf/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="Constructor_WhenSchemaFailsAndSqliteFallback_UsesFallbackDefaults" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
   &lt;Project Location="/home/alaricd/prj/pengdows.crud/pengdows.crud.Tests" Presentation="&amp;lt;pengdows.crud.Tests&amp;gt;" /&gt;
 &lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=9f0b5286_002Db3b3_002D4743_002Da600_002D8c440fd04a9c/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="All tests from &amp;lt;pengdows.crud.Tests&amp;gt;" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
+  &lt;Project Location="/home/alaricd/prj/pengdows.crud/pengdows.crud.Tests" Presentation="&amp;lt;pengdows.crud.Tests&amp;gt;" /&gt;
+&lt;/SessionState&gt;</s:String>
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=f08ebe9c_002D8b22_002D44cb_002Dbcd9_002D31ec05958843/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="ColumnInfoTests" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
   &lt;Project Location="/home/alaricd/prj/pengdows.crud/pengdows.crud.Tests" Presentation="&amp;lt;pengdows.crud.Tests&amp;gt;" /&gt;
 &lt;/SessionState&gt;</s:String>
