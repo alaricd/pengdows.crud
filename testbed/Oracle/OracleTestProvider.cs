@@ -1,4 +1,3 @@
-using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
 
 namespace testbed;
@@ -17,8 +16,8 @@ public class OracleTestProvider(IDatabaseContext context, IServiceProvider servi
     {
         var databaseContext = context;
         var sqlContainer = databaseContext.CreateSqlContainer();
-        var qp = databaseContext.DataSourceInfo.QuotePrefix;
-        var qs = databaseContext.DataSourceInfo.QuoteSuffix;
+        var qp = databaseContext.QuotePrefix;
+        var qs = databaseContext.QuoteSuffix;
 
         // Drop table if it exists
         sqlContainer.Query.AppendFormat(@"

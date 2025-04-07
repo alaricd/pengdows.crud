@@ -10,8 +10,8 @@ public class PostgreSQLTest(IDatabaseContext context, IServiceProvider servicePr
     {
         var databaseContext = context;
         var sqlContainer = databaseContext.CreateSqlContainer();
-        var qp = databaseContext.DataSourceInfo.QuotePrefix;
-        var qs = databaseContext.DataSourceInfo.QuoteSuffix;
+        var qp = databaseContext.QuotePrefix;
+        var qs = databaseContext.QuoteSuffix;
         sqlContainer.Query.AppendFormat(@"DROP TABLE IF EXISTS {0}test_table{1}", qp, qs);
         try
         {

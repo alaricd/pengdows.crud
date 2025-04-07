@@ -3,6 +3,7 @@ using System.Data.Common;
 
 namespace pengdows.crud;
 
+
 public class TransactionContext : ITransactionContext
 {
     private readonly DbConnection _connection;
@@ -13,12 +14,13 @@ public class TransactionContext : ITransactionContext
     private bool _isCompleted;
     private bool _rolledBack;
 
-    public TransactionContext(IDatabaseContext context, IsolationLevel isolationLevel)
+    public TransactionContext(IDatabaseContext context, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
     {
         _context = context;
+        this.IsolationLevel = isolationLevel;
         _connection = _context.GetConnection(ExecutionType.Write);
         EnsureConnectionIsOpen();
-        _transaction = _connection.BeginTransaction();
+        _transaction = _connection.BeginTransaction(isolationLevel);
     }
 
     private bool IsCompleted
@@ -38,6 +40,12 @@ public class TransactionContext : ITransactionContext
             return _context.NumberOfOpenConnections;
         }
     }
+
+    public string QuotePrefix => _context.QuotePrefix;
+
+    public string QuoteSuffix => _context.QuoteSuffix;
+
+    public string CompositeIdentifierSeparator => _context.CompositeIdentifierSeparator;
 
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
@@ -61,10 +69,9 @@ public class TransactionContext : ITransactionContext
         return _context.WrapObjectName(name);
     }
 
-    public TransactionContext BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
+    public TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
     {
-        throw new NotImplementedException(
-            "TransactionContext cannot start a new transaction, nested transactions are not supported.");
+      throw new InvalidOperationException("Cannot begin a transaction without an open connection.");
     }
 
     public string GenerateRandomName(int length = 8)
@@ -92,6 +99,11 @@ public class TransactionContext : ITransactionContext
      //   _context.CloseAndDisposeConnection(connection);
     }
 
+    public string MakeParameterName(DbParameter dbParameter)
+    {
+        return _context.MakeParameterName(dbParameter);
+    }
+
     public ProcWrappingStyle ProcWrappingStyle => _context.DataSourceInfo.ProcWrappingStyle;
 
 
@@ -103,7 +115,8 @@ public class TransactionContext : ITransactionContext
 
     public IDataSourceInformation DataSourceInfo => _context.DataSourceInfo;
 
-    public string MissingSqlSettings => _context.MissingSqlSettings;
+    public string SessionSettingsPreamble => _context.SessionSettingsPreamble;
+    public IsolationLevel IsolationLevel { get; }
 
     public void Commit()
     {

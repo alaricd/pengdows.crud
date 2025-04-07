@@ -19,10 +19,10 @@ public class DataSourceInformation : IDataSourceInformation
             DatabaseProductVersion = GetColumnValue<string>(metaDataRow, "DataSourceProductVersion", "Unknown");
             Product = InferDatabaseProduct(DatabaseProductName);
             ParameterMarkerPattern = GetColumnValue<string>(metaDataRow, "ParameterMarkerPattern", null);
-           _supportsNamedParameters = GetColumnValue<bool?>(metaDataRow, "SupportsNamedParameters");
+            _supportsNamedParameters = GetColumnValue<bool?>(metaDataRow, "SupportsNamedParameters");
             ParameterMarker = GetColumnValue<string>(metaDataRow, "ParameterMarkerFormat", "?");
             ParameterNameMaxLength = GetColumnValue(metaDataRow, "ParameterNameMaxLength", 0);
-            ParameterNamePatternRegex = new Regex(GetColumnValue<string>(metaDataRow, "ParameterNamePattern", ""));
+            ParameterNamePatternRegex = new Regex("[a-zA-Z][a-zA-Z0-9_]*"); 
             CompositeIdentifierSeparator = ".";
 
             if (Product != SupportedDatabase.Unknown)
@@ -54,33 +54,15 @@ public class DataSourceInformation : IDataSourceInformation
         catch (Exception)
         {
             SetupStoredProcWrap();
-            var type = GetConnectionType(connection);
-            if (type.Contains("Sqlite"))
-            {
-                ParameterMarker = "@";
-                CompositeIdentifierSeparator = ".";
-                ParameterNameMaxLength = 8;
-                QuotePrefix = QuoteSuffix = "\"";
-                _supportsNamedParameters = true;
-                DatabaseProductName = "Sqlite";
-                Product = SupportedDatabase.Sqlite;
-                ParameterNamePatternRegex =
-                    new Regex(@"^[A-Za-z0-9_][A-Za-z0-9_\$]*(?:::?[A-Za-z0-9_\$]*)*(\([^\s)]+\))?$",
-                        RegexOptions.Compiled);
-                MaxParameterLimit = GetMaxParameterLimitFor(Product);
-                ProcWrappingStyle = ProcWrappingStyle.None;
-                PrepareStatements = false;
-                return;
-            }
 
             throw;
         }
     }
 
-    public string ParameterMarkerPattern { get; set; }
+    public string ParameterMarkerPattern { get; }
 
-    public string QuotePrefix { get; private set; }
-    public string QuoteSuffix { get; private set; }
+    public string QuotePrefix { get; private set; } = "\"";
+    public string QuoteSuffix { get; private set; } = "\"";
 
     public bool SupportsNamedParameters => _supportsNamedParameters ?? false;
 
@@ -91,9 +73,9 @@ public class DataSourceInformation : IDataSourceInformation
     public string DatabaseProductVersion { get; }
     public string CompositeIdentifierSeparator { get; }
     public bool PrepareStatements { get; }
-    public ProcWrappingStyle ProcWrappingStyle { get; set; }
+    public ProcWrappingStyle ProcWrappingStyle { get; private set; }
     public int MaxParameterLimit { get; }
-    public SupportedDatabase Product { get; } = SupportedDatabase.Unknown;
+    public SupportedDatabase Product { get; private set; } = SupportedDatabase.Unknown;
 
     public bool SupportsMerge => Product switch
     {
@@ -139,7 +121,7 @@ public class DataSourceInformation : IDataSourceInformation
                 SupportedDatabase.MariaDb => "SELECT VERSION()",
                 SupportedDatabase.PostgreSql => "SELECT version()",
                 SupportedDatabase.CockroachDb => "SELECT version()",
-                SupportedDatabase.Oracle => "SELECT * FROM v$version",
+                SupportedDatabase.Oracle => @"SELECT * FROM v$version",
                 SupportedDatabase.Sqlite => "SELECT sqlite_version()",
                 SupportedDatabase.Firebird => "SELECT rdb$get_context('SYSTEM', 'VERSION')",
                 _ => string.Empty
@@ -158,23 +140,100 @@ public class DataSourceInformation : IDataSourceInformation
         }
     }
 
-    public DataTable GetSchema(DbConnection connection) =>
-        connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+    public DataTable GetSchema(DbConnection connection)
+    {
+        try
+        {
+            if (!isSqlite(connection))
+            {
+                return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+            }
 
-    public string GetConnectionType(DbConnection connection) => connection.GetType().Name;
+
+            var dt = BuildEmptySchema(
+                "Sqlite",
+                "3.40.1",
+                "@p[0-9]+",
+                "@{0}",
+                64,
+                @"@\\w+",
+                null,
+                true);
+
+            Product = SupportedDatabase.Sqlite;
+            return dt;
+        }
+        catch (Exception ex)
+        {
+            //
+
+            var dt = BuildEmptySchema();
+            Product = SupportedDatabase.Unknown;
+            return dt;
+        }
+    }
+
+    private static DataTable BuildEmptySchema(
+        string productName = "Unknown",
+        string productVersion = "Unknown",
+        string parameterMarkerPattern = "?",
+        string parameterMarkerFormat = "?",
+        int parameterNameMaxLength = 0,
+        string parameterNamePattern = @"@\\w+",
+        string parameterNamePatternRegex = @"[@:]\w+",
+        bool supportsNamedParameters = false
+    )
+    {
+        var dt = new DataTable();
+        dt.Columns.Add("DataSourceProductName", typeof(string));
+        dt.Columns.Add("DataSourceProductVersion", typeof(string));
+        dt.Columns.Add("ParameterMarkerPattern", typeof(string));
+        dt.Columns.Add("ParameterMarkerFormat", typeof(string));
+        dt.Columns.Add("ParameterNameMaxLength", typeof(int));
+        dt.Columns.Add("ParameterNamePattern", typeof(string));
+        dt.Columns.Add("ParameterNamePatternRegex", typeof(string)); // ✅ added column
+        dt.Columns.Add("SupportsNamedParameters", typeof(bool));
+        dt.Rows.Add(
+            productName,
+            productVersion,
+            parameterMarkerPattern,
+            parameterMarkerFormat,
+            parameterNameMaxLength,
+            parameterNamePattern,
+            parameterNamePatternRegex, // ✅ added value
+            supportsNamedParameters
+        );
+        return dt;
+    }
+
+    private bool isSqlite(DbConnection connection)
+    {
+        try
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT sqlite_version()";
+            var version = cmd.ExecuteScalar()?.ToString();
+            return version != null;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
 
     private string ExtractParameterMarker()
     {
-        var tmp = ParameterMarker.Replace("{0}", "");
-        if (!string.IsNullOrWhiteSpace(tmp))
-            return tmp;
-        
-        if (!String.IsNullOrWhiteSpace(ParameterMarkerPattern))
-        {
-            tmp = ParameterMarkerPattern.Substring(0, 1);
-            if (!string.IsNullOrWhiteSpace(tmp))
-                return tmp;
-        }
+        // var tmp = ParameterMarker.Replace("{0}", "");
+        // if (!string.IsNullOrWhiteSpace(tmp))
+        //     return tmp;
+        //
+        // if (!String.IsNullOrWhiteSpace(ParameterMarkerPattern))
+        // {
+        //     tmp = ParameterMarkerPattern.Substring(0, 1);
+        //     if (!string.IsNullOrWhiteSpace(tmp))
+        //         return tmp;
+        // }
 
         switch (Product)
         {
@@ -182,6 +241,7 @@ public class DataSourceInformation : IDataSourceInformation
             case SupportedDatabase.SqlServer:
             case SupportedDatabase.MySql:
             case SupportedDatabase.MariaDb:
+            case SupportedDatabase.Sqlite:
                 return "@";
             case SupportedDatabase.PostgreSql:
             case SupportedDatabase.CockroachDb:

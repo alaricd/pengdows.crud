@@ -1,7 +1,6 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
 
@@ -22,8 +21,9 @@ public class OracleTestContainer : TestContainer
             .WithImage("oracle/database:18.4.0-xe")
             .WithEnvironment("ACCEPT_LICENSE_AGREEMENT", "Y")
             .WithEnvironment("ORACLE_PWD", _password)
-            .WithPortBinding(_port, _port)
-            .WithExposedPort(_port)
+           // .WithEnvironment("ORACLE_SID", "ORCLCDB")
+            .WithPortBinding(_port, true)
+            //.WithExposedPort(_port)
             .WithWaitStrategy(Wait.ForUnixContainer()
                 .UntilPortIsAvailable(_port) 
             )

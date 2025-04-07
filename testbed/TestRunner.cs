@@ -1,6 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using pengdows.crud;
-
 namespace testbed;
 
 

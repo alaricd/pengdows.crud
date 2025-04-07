@@ -97,6 +97,10 @@ public class TypeMapRegistry : ITypeMapRegistry
             TypeMap[type] = tableInfo;
         }
 
+        if (tableInfo.Columns.Count == 0)
+        {
+            throw new NoColumnsFoundException("This POCO entity has no properties, marked as columns.");
+        }
         return tableInfo;
     }
 

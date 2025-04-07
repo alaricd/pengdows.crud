@@ -25,6 +25,13 @@ public class SqlContainer : ISqlContainer
 
     public StringBuilder Query { get; }
 
+    public int ParameterCount => _parameters.Count;
+
+    public DbParameter AppendParameter<T>(DbType type, T value)
+    {
+        return AppendParameter(null, type, value);
+    }
+
     public DbParameter AppendParameter<T>(string? name, DbType type, T value)
     {
         name ??= _context.GenerateRandomName();
@@ -42,7 +49,7 @@ public class SqlContainer : ISqlContainer
         {
             conn = _context.GetConnection(ExecutionType.Write);
             cmd = PrepareCommand(conn, commandType, ExecutionType.Write);
-            
+
             return await cmd.ExecuteNonQueryAsync();
         }
         finally
@@ -157,14 +164,18 @@ public class SqlContainer : ISqlContainer
 
     private DbCommand PrepareCommand(DbConnection conn, CommandType commandType, ExecutionType executionType)
     {
-        if (commandType == CommandType.TableDirect) throw new NotSupportedException("TableDirect isn't supported.");
+        if (commandType == CommandType.TableDirect)
+        {
+            throw new NotSupportedException("TableDirect isn't supported.");
+        }
 
         OpenConnection(conn);
         var cmd = CreateCommand(conn);
         cmd.CommandType = CommandType.Text;
         Console.WriteLine(Query);
-        cmd.CommandText = _context.MissingSqlSettings +
-                          (commandType == CommandType.StoredProcedure ? WrapForStoredProc(executionType) : Query);
+        cmd.CommandText = (commandType == CommandType.StoredProcedure)
+            ? WrapForStoredProc(executionType)
+            : Query.ToString();
         if (_parameters.Count > _context.MaxParameterLimit)
             throw new InvalidOperationException(
                 $"Query exceeds the maximum parameter limit of {_context.DataSourceInfo.MaxParameterLimit} for {_context.DataSourceInfo.DatabaseProductName}.");

@@ -1,3 +1,5 @@
+using System.Collections;
+
 namespace pengdows.crud;
 
 public class Utils
@@ -24,5 +26,11 @@ public class Utils
             decimal m => m == 0m,
             _ => false
         };
+    }
+
+    public static bool IsNullOrEmpty (ICollection enumerable)
+    {
+        if(enumerable == null) return true;
+        return (enumerable.Count == 0) ;
     }
 }

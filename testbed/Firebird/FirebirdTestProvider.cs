@@ -9,8 +9,8 @@ public class FirebirdTestProvider(IDatabaseContext context, IServiceProvider ser
     {
         var databaseContext = context;
         var sqlContainer = databaseContext.CreateSqlContainer();
-        var qp = databaseContext.DataSourceInfo.QuotePrefix;
-        var qs = databaseContext.DataSourceInfo.QuoteSuffix;
+        var qp = databaseContext.QuotePrefix;
+        var qs = databaseContext.QuoteSuffix;
 
         // Drop table if it exists (Firebird-specific method)
         sqlContainer.Query.Append(@"

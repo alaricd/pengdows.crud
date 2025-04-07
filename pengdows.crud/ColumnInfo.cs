@@ -1,7 +1,6 @@
 using System.Data;
 using System.Reflection;
 using System.Text.Json;
-using pengdows.crud.attributes;
 
 namespace pengdows.crud;
 

@@ -8,7 +8,7 @@
 
     <ItemGroup>
         <PackageReference Include="JetBrains.Annotations" Version="2025.1.0-eap1"/>
-        <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.3" />
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.3"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
         <PackageReference Include="Moq" Version="4.20.72"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
@@ -20,6 +20,10 @@
 
     <ItemGroup>
         <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="pengdows_crud_tests\"/>
     </ItemGroup>
 
 </Project>

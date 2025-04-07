@@ -1,8 +1,7 @@
 using System.Data;
-using pengdows.crud;
 using Xunit;
 
-namespace Pengdows.Crud.Tests;
+namespace pengdows.crud.Tests;
 
 public class ColumnInfoTests
 {

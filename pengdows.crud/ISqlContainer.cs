@@ -7,7 +7,9 @@ namespace pengdows.crud;
 public interface ISqlContainer : IDisposable
 {
     StringBuilder Query { get; }
+    int ParameterCount { get;  }
 
+    DbParameter AppendParameter<T>( DbType type, T value);
     DbParameter AppendParameter<T>(string? name, DbType type, T value);
     void AppendParameters(List<DbParameter> list);
     void AppendParameters(DbParameter parameter);

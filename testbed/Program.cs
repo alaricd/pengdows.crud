@@ -31,9 +31,9 @@ var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory.Instan
 // var postgres = new PostgreSQLTest(pgDb);
 // var sql = new TestProvider(sqlDb);
 // var trash = new TestProvider(myDb, host.Services);
-var lite = new TestProvider(liteDb, host.Services);
-await lite.RunTest();
-
+// var lite = new TestProvider(liteDb, host.Services);
+// await lite.RunTest();
+//
 // var my = new MySqlTestContainer();
 // await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
 // var maria = new MariaDbContainer();
@@ -44,15 +44,15 @@ await lite.RunTest();
 // await ms.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
 // var o = new OracleTestContainer();
 // await o.RunTestWithContainerAsync<OracleTestProvider>( host.Services, (db, sp) => new OracleTestProvider(db, sp));
-try
-{
-    var fb = new FirebirdSqlTestContainer();
-    await fb.RunTestWithContainerAsync(host.Services, (db, sp) => new FirebirdTestProvider(db, sp));
-}
-catch (Exception ex)
-{
-    Console.WriteLine(ex);
-}
+// try
+// {
+     var fb = new FirebirdSqlTestContainer();
+     await fb.RunTestWithContainerAsync(host.Services, (db, sp) => new FirebirdTestProvider(db, sp));
+// }
+// catch (Exception ex)
+// {
+//     Console.WriteLine(ex);
+// }
 // In test setup
 // var containers = new List<TestContainer>
 // {

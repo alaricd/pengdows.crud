@@ -2,8 +2,6 @@ using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
-using Org.BouncyCastle.Crypto.Macs;
 using pengdows.crud;
 
 namespace testbed;

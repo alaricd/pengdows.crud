@@ -1,13 +1,12 @@
-using System.Data;
 using pengdows.crud;
 
 namespace testbed;
 
-public class TestProvider:IAsyncTestProvider
+public class TestProvider : IAsyncTestProvider
 {
     private readonly IDatabaseContext _context;
     private readonly EntityHelper<TestTable, long> _helper;
-    
+
 
     public TestProvider(IDatabaseContext databaseContext, IServiceProvider serviceProvider)
     {
@@ -41,8 +40,6 @@ public class TestProvider:IAsyncTestProvider
 
     public virtual async Task CountTestRows()
     {
-        var context = _context;
-
         var sc = _context.CreateSqlContainer();
         sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", _helper.WrappedTableName);
         var count = await sc.ExecuteScalarAsync<int>();
@@ -53,8 +50,8 @@ public class TestProvider:IAsyncTestProvider
     {
         var databaseContext = _context;
         var sqlContainer = databaseContext.CreateSqlContainer();
-        var qp = databaseContext.DataSourceInfo.QuotePrefix;
-        var qs = databaseContext.DataSourceInfo.QuoteSuffix;
+        var qp = databaseContext.QuotePrefix;
+        var qs = databaseContext.QuoteSuffix;
         sqlContainer.Query.AppendFormat(@"DROP TABLE IF EXISTS {0}test_table{1}", qp, qs);
         try
         {
@@ -110,14 +107,19 @@ CREATE TABLE {0}test_table{1} (
         await sq.ExecuteNonQueryAsync();
     }
 
-    private async Task<TestTable> RetrieveRows( )
+    private async Task<TestTable> RetrieveRows()
     {
         var sc = _helper.BuildRetrieve([1]);
 
         Console.WriteLine(sc.Query.ToString());
 
-        var x = await _helper.LoadSingleAsync(sc);
-        return x;
+        var x = await _helper.LoadListAsync(sc);
+        if (_context.NumberOfOpenConnections > 0)
+        {
+            throw new Exception($"There are {_context.NumberOfOpenConnections} open connections");
+        }
+
+        return x.First();
     }
 
     private async Task DeletedRow(TestTable t)

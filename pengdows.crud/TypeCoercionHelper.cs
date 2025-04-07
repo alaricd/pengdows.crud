@@ -13,7 +13,7 @@ public static class TypeCoercionHelper
     {
         if (Utils.IsNullOrDbNull(value)) return null;
 
-        var targetType = columnInfo.PropertyInfo.PropertyType;
+        var targetType = columnInfo?.PropertyInfo?.PropertyType;
 
         if (dbFieldType == targetType)
             return value;

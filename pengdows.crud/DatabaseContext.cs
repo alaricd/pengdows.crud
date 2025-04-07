@@ -1,6 +1,8 @@
 using System.Data;
 using System.Data.Common;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using pengdows.crud.exceptions;
 
 namespace pengdows.crud;
@@ -9,33 +11,32 @@ public class DatabaseContext : IDatabaseContext
 {
     private static readonly Random _random = new();
     private readonly DbProviderFactory _factory;
-    private readonly bool _isReadConnection = true;
-    private readonly bool _isWriteConnection = true;
+    private bool _isReadConnection = true;
+    private bool _isWriteConnection = true;
     private DbConnection? _connection;
 
     private long _connectionCount;
     private DataSourceInformation _dataSourceInfo;
     private bool _isSqlServer;
-    private string _missingSqlSettings;
+    private string _connectionSessionSettings;
+    private int _numberOfOpenConnections;
+    private bool _applyConnectionSessionSettings;
+    private readonly ILogger<IDatabaseContext> _logger;
 
     public string Name { get; set; }
 
-    public DatabaseContext(string connectionString, DbProviderFactory factory, ITypeMapRegistry typeMapRegistry,
-        DbMode mode = DbMode.Standard)
+    public DatabaseContext(string connectionString,
+        DbProviderFactory factory,
+        ITypeMapRegistry typeMapRegistry = null,
+        DbMode mode = DbMode.Standard,
+        ReadWriteMode readWriteMode = ReadWriteMode.ReadWrite,
+        ILogger<IDatabaseContext> logger = null)
     {
-        TypeMapRegistry = typeMapRegistry;
+        TypeMapRegistry = typeMapRegistry ?? new TypeMapRegistry();
         ConnectionMode = mode;
         _factory = factory;
-        InitializeInternals(connectionString, mode);
-    }
-
-    public DatabaseContext(string connectionString, string providerName, ITypeMapRegistry typeMapRegistry,
-        DbMode mode = DbMode.Standard)
-    {
-        TypeMapRegistry = typeMapRegistry;
-        ConnectionMode = mode;
-        _factory = DbProviderFactories.GetFactory(providerName);
-        InitializeInternals(connectionString, mode);
+        _logger = logger ?? NullLogger<IDatabaseContext>.Instance;
+        InitializeInternals(connectionString, mode, readWriteMode);
     }
 
     private string ConnectionString { get; set; }
@@ -45,6 +46,7 @@ public class DatabaseContext : IDatabaseContext
                                        throw new ObjectDisposedException(
                                            "attempt to use single connection from the wrong mode.");
 
+
     public DbMode ConnectionMode { get; private set; }
 
     public ITypeMapRegistry TypeMapRegistry { get; }
@@ -52,21 +54,21 @@ public class DatabaseContext : IDatabaseContext
     public IDataSourceInformation DataSourceInfo => _dataSourceInfo;
 
 
-    public string MissingSqlSettings => _missingSqlSettings ?? "";
+    public string SessionSettingsPreamble => _connectionSessionSettings ?? "";
 
     public string WrapObjectName(string name)
     {
         if (string.IsNullOrEmpty(name)) return string.Empty;
 
-        var ss = name.Split(_dataSourceInfo.CompositeIdentifierSeparator);
-        var qp = _dataSourceInfo.QuotePrefix;
-        var qs = _dataSourceInfo.QuoteSuffix;
+        var ss = name.Split(CompositeIdentifierSeparator);
+        var qp = QuotePrefix;
+        var qs = QuoteSuffix;
         if (name.Contains(qp) || name.Contains(qs)) return name; //already wrapped or contains a quote
 
         var sb = new StringBuilder();
         foreach (var s in ss)
         {
-            if (sb.Length > 0) sb.Append(_dataSourceInfo.CompositeIdentifierSeparator);
+            if (sb.Length > 0) sb.Append(CompositeIdentifierSeparator);
 
             sb.Append(qp);
             sb.Append(s);
@@ -76,13 +78,23 @@ public class DatabaseContext : IDatabaseContext
         return sb.ToString();
     }
 
-    public TransactionContext BeginTransaction(IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
+    public TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
     {
-        if (!_isWriteConnection && isolationLevel == IsolationLevel.RepeatableRead)
-            throw new InvalidOperationException("Read only transactions must be 'RepeatableRead' isolationLevel.");
+        if (!_isWriteConnection && isolationLevel is null)
+        {
+            isolationLevel = IsolationLevel.RepeatableRead;
+        }
 
-        return new TransactionContext(this, isolationLevel);
+        isolationLevel ??= IsolationLevel.ReadCommitted;
+
+        if (!_isWriteConnection && isolationLevel != IsolationLevel.RepeatableRead)
+            throw new InvalidOperationException("Read-only transactions must use 'RepeatableRead'.");
+
+        return new TransactionContext(this, isolationLevel.Value);
     }
+
+
+    public string CompositeIdentifierSeparator => _dataSourceInfo.CompositeIdentifierSeparator;
 
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
@@ -163,8 +175,11 @@ public class DatabaseContext : IDatabaseContext
 
         // Validate the generated name using the ParameterNamePattern regex
         if (!dsi.ParameterNamePatternRegex.IsMatch(generatedName))
+        {
+            _logger.LogInformation(generatedName);
             // If the name is not valid, regenerate a new one
             return GenerateRandomName(len);
+        }
 
         return generatedName;
     }
@@ -176,12 +191,18 @@ public class DatabaseContext : IDatabaseContext
 
     public void AssertIsReadConnection()
     {
-        if (!_isReadConnection) throw new InvalidOperationException("The connection is not read connection.");
+        if (!_isReadConnection)
+        {
+            throw new InvalidOperationException("The connection is not read connection.");
+        }
     }
 
     public void AssertIsWriteConnection()
     {
-        if (!_isWriteConnection) throw new InvalidOperationException("The connection is not write connection.");
+        if (!_isWriteConnection)
+        {
+            throw new InvalidOperationException("The connection is not write connection.");
+        }
     }
 
     public void CloseAndDisposeConnection(DbConnection connection)
@@ -191,27 +212,34 @@ public class DatabaseContext : IDatabaseContext
             return;
         }
 
-        Console.WriteLine($"Connection mode is: {ConnectionMode}");
+        _logger.LogInformation($"Connection mode is: {ConnectionMode}");
         switch (ConnectionMode)
-        {   
+        {
             case DbMode.SingleConnection:
             case DbMode.SqlCe:
                 if (_connection != connection)
-                {         
+                {
                     //never close our single write connection
-                    Console.WriteLine("Not our single connection, closing");    
+                    _logger.LogInformation("Not our single connection, closing");
                     connection.Dispose();
                 }
 
                 break;
             case DbMode.Standard:
             case DbMode.SqlExpressUserMode:
-                Console.WriteLine("Closing a standard connection");
+                _logger.LogInformation("Closing a standard connection");
                 connection.Dispose();
                 break;
             default:
                 throw new NotSupportedException("Unsupported connection mode.");
         }
+    }
+
+    public string MakeParameterName(DbParameter dbParameter)
+    {
+        return !_dataSourceInfo.SupportsNamedParameters
+            ? "?"
+            : $"{_dataSourceInfo.ParameterMarker}{dbParameter.ParameterName}";
     }
 
     public ProcWrappingStyle ProcWrappingStyle => _dataSourceInfo.ProcWrappingStyle;
@@ -246,7 +274,10 @@ public class DatabaseContext : IDatabaseContext
         while (reader.Read())
         {
             var key = reader.GetString(0).ToUpperInvariant();
-            if (settings.ContainsKey(key)) currentSettings[key] = reader.GetString(1) == "SET" ? "ON" : "OFF";
+            if (settings.ContainsKey(key))
+            {
+                currentSettings[key] = reader.GetString(1) == "SET" ? "ON" : "OFF";
+            }
         }
 
         var sb = CompareResults(settings, currentSettings);
@@ -256,19 +287,23 @@ public class DatabaseContext : IDatabaseContext
         {
             sb.Insert(0, "SET NOCOUNT ON;\n");
             sb.AppendLine(";\nSET NOCOUNT OFF;");
-            _missingSqlSettings = sb.ToString();
+            _connectionSessionSettings = sb.ToString();
         }
     }
 
     private StringBuilder CompareResults(Dictionary<string, string> expected, Dictionary<string, string> recorded)
     {
+        //used for checking which connection/session settings are on or off for mssql
         var sb = new StringBuilder();
         foreach (var expectedKvp in expected)
         {
             recorded.TryGetValue(expectedKvp.Key, out var result);
             if (result != expectedKvp.Value)
             {
-                if (sb.Length > 0) sb.AppendLine();
+                if (sb.Length > 0)
+                {
+                    sb.AppendLine();
+                }
 
                 sb.Append($"SET {expectedKvp.Key} {expectedKvp.Value}");
             }
@@ -277,11 +312,13 @@ public class DatabaseContext : IDatabaseContext
         return sb;
     }
 
-    private void InitializeInternals(string connectionString, DbMode mode)
+    private void InitializeInternals(string connectionString, DbMode mode, ReadWriteMode readWriteMode)
     {
         DbConnection conn = null;
         try
         {
+            _isReadConnection = (readWriteMode & ReadWriteMode.ReadOnly) == ReadWriteMode.ReadOnly;
+            _isWriteConnection = (readWriteMode & ReadWriteMode.WriteOnly) == ReadWriteMode.WriteOnly;
             var csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
             conn = _factory.CreateConnection();
             csb.ConnectionString = connectionString;
@@ -297,10 +334,10 @@ public class DatabaseContext : IDatabaseContext
             }
 
             _dataSourceInfo = new DataSourceInformation(conn);
-            CheckForSqlServerSettings(conn);
+            SetupPreambleForProvider(conn);
             ConnectionString = csb.ConnectionString;
             this.Name = _dataSourceInfo.DatabaseProductName;
-            if (_dataSourceInfo.Product == SupportedDatabase.Sqlite 
+            if (_dataSourceInfo.Product == SupportedDatabase.Sqlite
                 && "Data Source=:memory:" == ConnectionString)
             {
                 //sqlite memory mode
@@ -321,6 +358,60 @@ public class DatabaseContext : IDatabaseContext
         }
     }
 
+    private void SetupPreambleForProvider(DbConnection conn)
+    {
+        switch (_dataSourceInfo.Product)
+        {
+            case SupportedDatabase.SqlServer:
+                //sets up only what is necessary
+                CheckForSqlServerSettings(conn);
+                break;
+
+            case SupportedDatabase.MySql:
+            case SupportedDatabase.MariaDb:
+                _connectionSessionSettings =
+                    "SET SESSION sql_mode = 'STRICT_ALL_TABLES,ONLY_FULL_GROUP_BY,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION';\n";
+                break;
+
+            case SupportedDatabase.PostgreSql:
+            case SupportedDatabase.CockroachDb:
+                _connectionSessionSettings = @"
+                SET standard_conforming_strings = on;
+                SET client_min_messages = warning;
+                SET search_path = public;
+";
+                break;
+
+            case SupportedDatabase.Oracle:
+                _connectionSessionSettings = @"
+                ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';
+                ALTER SESSION SET CURRENT_SCHEMA = your_schema;
+";
+                break;
+
+            case SupportedDatabase.Sqlite:
+                _connectionSessionSettings = "PRAGMA foreign_keys = ON;";
+                break;
+
+            case SupportedDatabase.Firebird:
+                // _connectionSessionSettings = "SET NAMES UTF8;";
+                // has to be done in connection string, not session;
+                break;
+
+            case SupportedDatabase.Db2:
+                _connectionSessionSettings = @"
+                 SET CURRENT DEGREE = 'ANY';
+";
+                break;
+
+            default:
+                _connectionSessionSettings = string.Empty;
+                break;
+        }
+
+        _applyConnectionSessionSettings = _connectionSessionSettings?.Length > 0;
+    }
+
 
     private DbConnection GetStandardConnection()
     {
@@ -331,6 +422,10 @@ public class DatabaseContext : IDatabaseContext
     }
 
     public long NumberOfOpenConnections => Interlocked.Read(ref _connectionCount);
+
+    public string QuotePrefix => DataSourceInfo.QuotePrefix;
+
+    public string QuoteSuffix => DataSourceInfo.QuoteSuffix;
 
     private void AddStateChangeHandler(DbConnection connection)
     {
@@ -343,18 +438,47 @@ public class DatabaseContext : IDatabaseContext
                     break;
                 case ConnectionState.Open:
                     Interlocked.Increment(ref _connectionCount);
+                    if (args.OriginalState == ConnectionState.Closed)
+                    {
+                        ApplyConnectionSessionSettings(connection);
+                    }
+
                     break;
                 case ConnectionState.Closed:
                     Interlocked.Decrement(ref _connectionCount);
                     break;
+                case ConnectionState.Executing:
+                case ConnectionState.Fetching:
+                    // we aren't interested
+                    break;
+                case ConnectionState.Connecting:
+                    //maybe we care
+                    break;
                 default:
-                    // not important for this 
+                    // can't get here
                     break;
             }
 
-            Console.WriteLine("{1} now has open connections:{0}", _connectionCount , 
+            var info = String.Format("{1} now has open connections:{0}", _connectionCount,
                 DataSourceInfo?.Product.ToString() ?? String.Empty);
+            _logger.LogInformation(info);
         };
+    }
+
+    private void ApplyConnectionSessionSettings(DbConnection connection)
+    {
+        if (_applyConnectionSessionSettings)
+            try
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = _connectionSessionSettings;
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error setting session settings:" + ex.Message);
+                _applyConnectionSessionSettings = false;
+            }
     }
 
     private DbConnection GetSingleConnection()
