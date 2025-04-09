@@ -2,11 +2,17 @@ using pengdows.crud;
 
 namespace testbed;
 
-public class PostgreSQLTest(IDatabaseContext context, IServiceProvider serviceProvider) 
-    : TestProvider(context, serviceProvider)
+public class PostgreSQLTest
+    : TestProvider
 {
-    public override async Task CreateTable()
+    private readonly IDatabaseContext context;
 
+    public PostgreSQLTest(IDatabaseContext context, IServiceProvider serviceProvider) : base(context, serviceProvider)
+    {
+        this.context = context;
+    }
+
+    public override async Task CreateTable()
     {
         var databaseContext = context;
         var sqlContainer = databaseContext.CreateSqlContainer();
@@ -17,7 +23,7 @@ public class PostgreSQLTest(IDatabaseContext context, IServiceProvider servicePr
         {
             await sqlContainer.ExecuteNonQueryAsync();
         }
-        catch (Exception ex) //when (ex.Number == 942)
+        catch  
         {
             // Table did not exist, ignore
         }

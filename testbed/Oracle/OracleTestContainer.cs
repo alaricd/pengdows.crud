@@ -1,43 +1,60 @@
+using System.ComponentModel;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
+using IContainer = DotNet.Testcontainers.Containers.IContainer;
 
 namespace testbed;
 
-public class OracleTestContainer : TestContainer 
+public class OracleTestContainer : TestContainer
 {
-    private readonly TestcontainersContainer _container;
+    private readonly IContainer _container;
     private string? _connectionString;
-    private string _password = "mysecurepassword";
-    private string _username = "system";
-    private string _database = "XEPDB1";
-    private int _port = 1521;
+    private const string _password = "mysecurepassword";
+    private const string _username = "system";
+    private const string _sid = "XE"; // confirmed from inspect (ORACLE_SID=XE)
+    private const int _port = 1521;
 
     public OracleTestContainer()
     {
-        _container = new TestcontainersBuilder<TestcontainersContainer>()
+        
+        _container = new ContainerBuilder()
             .WithImage("oracle/database:18.4.0-xe")
             .WithEnvironment("ACCEPT_LICENSE_AGREEMENT", "Y")
             .WithEnvironment("ORACLE_PWD", _password)
-           // .WithEnvironment("ORACLE_SID", "ORCLCDB")
-            .WithPortBinding(_port, true)
-            //.WithExposedPort(_port)
-            .WithWaitStrategy(Wait.ForUnixContainer()
-                .UntilPortIsAvailable(_port) 
-            )
+            .WithExposedPort(_port)
+            .WithPortBinding(_port, true) // dynamic host binding
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(1521))
             .Build();
+        throw new Exception("won't start");
     }
 
     public override async Task StartAsync()
     {
         await _container.StartAsync();
-        var hostPort = _container.GetMappedPublicPort(_port);
-        _connectionString = // $@"User Id={_username};Password={_password};Data Source=localhost:{hostPort}/{_database};";
-            $@"User Id={_username};Password={_password};Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT={hostPort}))(CONNECT_DATA=(SERVICE_NAME={_database})));";
 
-        await base.WaitForDbToStart(OracleClientFactory.Instance, _connectionString, _container, 120);
+        var hostPort = _container.GetMappedPublicPort(_port);
+
+        // Fully qualified TNS format — safest and matches official documentation
+        //         _connectionString = $@"
+        // User Id={_username};
+        // Password={_password};
+        // Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT={hostPort}))
+        // (CONNECT_DATA=(SERVICE_NAME={_sid})))";
+        var csb = OracleClientFactory.Instance.CreateConnectionStringBuilder();
+        csb.ConnectionString = $"User Id={_username};Password={_password}; Data Source=localhost:{hostPort}/{_sid};";
+        _connectionString = csb.ConnectionString;
+        // // Optional: print logs to debug
+        // Console.WriteLine(await _container.());
+
+        // while (_container.Health == TestcontainersHealthStatus.Starting)
+        // {
+        //     await Task.Delay(1000);
+        // }
+        // Wait until the DB is accepting connections and SELECT 1 succeeds
+        await base.WaitForDbToStart(OracleClientFactory.Instance, _connectionString, _container, 300);
     }
 
     public override async Task<IDatabaseContext> GetDatabaseContextAsync(IServiceProvider services)

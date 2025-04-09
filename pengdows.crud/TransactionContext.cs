@@ -1,29 +1,71 @@
+#region
+
 using System.Data;
 using System.Data.Common;
 
-namespace pengdows.crud;
+#endregion
 
+namespace pengdows.crud;
 
 public class TransactionContext : ITransactionContext
 {
     private readonly DbConnection _connection;
-    private readonly IDatabaseContext _context;
+    private readonly DatabaseContext _context;
     private readonly DbTransaction _transaction;
     private bool _committed;
     private long _disposed;
     private bool _isCompleted;
     private bool _rolledBack;
+    public bool WasCommitted => _committed;
+    public bool WasRolledBack => _rolledBack;
+    public Guid TransactionId { get; } = Guid.NewGuid();
 
-    public TransactionContext(IDatabaseContext context, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
+    internal TransactionContext(IDatabaseContext context, IsolationLevel isolationLevel = IsolationLevel.Unspecified)
     {
-        _context = context;
-        this.IsolationLevel = isolationLevel;
-        _connection = _context.GetConnection(ExecutionType.Write);
+        _context = context as DatabaseContext ?? throw new ArgumentNullException(nameof(context));
+        if (_context.Product == SupportedDatabase.CockroachDb)
+        {
+            // this is the only level supported by cockroachdb
+            isolationLevel = IsolationLevel.Serializable;
+        }
+
+        var executionType = GetExecutionAndSetIsolationTypes(ref isolationLevel);
+        IsolationLevel = isolationLevel;
+        _connection = _context.GetConnection(executionType);
         EnsureConnectionIsOpen();
         _transaction = _connection.BeginTransaction(isolationLevel);
     }
 
-    private bool IsCompleted
+    private ExecutionType GetExecutionAndSetIsolationTypes(ref IsolationLevel isolationLevel)
+    {
+        var executionType = ExecutionType.Write;
+        switch (_context.ReadWriteMode)
+        {
+            case ReadWriteMode.ReadWrite:
+            case ReadWriteMode.WriteOnly:
+                //leave the default "write" selection
+                if (isolationLevel < IsolationLevel.ReadCommitted)
+                {
+                    isolationLevel = IsolationLevel.ReadCommitted;
+                }
+
+                break;
+            case ReadWriteMode.ReadOnly:
+                executionType = ExecutionType.Read;
+                if (isolationLevel < IsolationLevel.RepeatableRead)
+                {
+                    isolationLevel = IsolationLevel.RepeatableRead;
+                }
+
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+
+        return executionType;
+    }
+
+    public bool IsCompleted
     {
         get
         {
@@ -32,20 +74,17 @@ public class TransactionContext : ITransactionContext
         }
     }
 
+    public IsolationLevel IsolationLevel { get; }
 
-    public long NumberOfOpenConnections
-    {
-        get
-        {
-            return _context.NumberOfOpenConnections;
-        }
-    }
+
+    public long NumberOfOpenConnections => _context.NumberOfOpenConnections;
 
     public string QuotePrefix => _context.QuotePrefix;
 
     public string QuoteSuffix => _context.QuoteSuffix;
 
     public string CompositeIdentifierSeparator => _context.CompositeIdentifierSeparator;
+    public SupportedDatabase Product => _context.Product;
 
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
@@ -71,7 +110,7 @@ public class TransactionContext : ITransactionContext
 
     public TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
     {
-      throw new InvalidOperationException("Cannot begin a transaction without an open connection.");
+        throw new InvalidOperationException("Cannot begin a transaction without an open connection.");
     }
 
     public string GenerateRandomName(int length = 8)
@@ -96,7 +135,7 @@ public class TransactionContext : ITransactionContext
 
     public void CloseAndDisposeConnection(DbConnection connection)
     {
-     //   _context.CloseAndDisposeConnection(connection);
+        //   _context.CloseAndDisposeConnection(connection);
     }
 
     public string MakeParameterName(DbParameter dbParameter)
@@ -116,10 +155,13 @@ public class TransactionContext : ITransactionContext
     public IDataSourceInformation DataSourceInfo => _context.DataSourceInfo;
 
     public string SessionSettingsPreamble => _context.SessionSettingsPreamble;
-    public IsolationLevel IsolationLevel { get; }
+
+    internal DbTransaction Transaction => _transaction;
 
     public void Commit()
     {
+        if (IsCompleted) throw new InvalidOperationException("Transaction already completed.");
+
         try
         {
             _transaction.Commit();
@@ -134,6 +176,8 @@ public class TransactionContext : ITransactionContext
 
     public void Rollback()
     {
+        if (IsCompleted) throw new InvalidOperationException("Transaction already completed.");
+
         try
         {
             _transaction.Rollback();
@@ -168,8 +212,12 @@ public class TransactionContext : ITransactionContext
     {
         if (Interlocked.Increment(ref _disposed) == 1)
         {
-            if (!_committed) Rollback();
-            if (_context.ConnectionMode == DbMode.Standard) _connection.Dispose();
+            if (!_committed)
+            {
+                Rollback();
+            }
+
+            _context.CloseAndDisposeConnection(_connection);
 
             if (disposing) GC.SuppressFinalize(this);
         }

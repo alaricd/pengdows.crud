@@ -2,16 +2,17 @@ using pengdows.crud;
 
 namespace testbed;
 
-public class OracleTestProvider(IDatabaseContext context, IServiceProvider serviceProvider)
-    : TestProvider(context, serviceProvider)
+public class OracleTestProvider
+    : TestProvider
 {
-    // public override async Task CountTestRows(DatabaseContext context, EntityHelper<TestTable, int> helper)
-    // {
-    //     var sc = context.CreateSqlContainer();
-    //     sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", helper.WrappedWrappedTableName);
-    //     var count =await  sc.ExecuteScalarAsync<decimal>();
-    //     Console.WriteLine($"Count: {count}");
-    // }
+    private readonly IDatabaseContext context;
+
+    public OracleTestProvider(IDatabaseContext context, IServiceProvider serviceProvider)
+        : base(context, serviceProvider)
+    {
+        this.context = context;
+    }
+
     public override async Task CreateTable()
     {
         var databaseContext = context;
@@ -50,15 +51,15 @@ END;", qp, qs);
         sqlContainer.Clear();
         sqlContainer.Query.AppendFormat(@"
 CREATE TABLE {0}test_table{1} (
-  {0}id{1} NUMBER PRIMARY KEY,
+  {0}id{1} NUMBER(18,0) PRIMARY KEY,
   {0}name{1} VARCHAR2(100) NOT NULL,
   {0}description{1} VARCHAR2(1000) NOT NULL,
-  {0}created_at{1} DATE NOT NULL,
+  {0}created_at{1} TIMESTAMP NOT NULL,
   {0}created_by{1} VARCHAR2(100) NOT NULL,
-  {0}updated_at{1} DATETIME NOT NULL,
+  {0}updated_at{1} TIMESTAMP NOT NULL,
   {0}updated_by{1} VARCHAR(100) NOT NULL
 )", qp, qs);
-      Console.WriteLine(sqlContainer.Query.ToString());
+        Console.WriteLine(sqlContainer.Query.ToString());
         await sqlContainer.ExecuteNonQueryAsync();
 
         // Create sequence

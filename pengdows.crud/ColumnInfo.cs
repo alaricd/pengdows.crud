@@ -1,6 +1,10 @@
+#region
+
 using System.Data;
 using System.Reflection;
 using System.Text.Json;
+
+#endregion
 
 namespace pengdows.crud;
 

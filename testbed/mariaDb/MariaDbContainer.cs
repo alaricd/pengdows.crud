@@ -1,3 +1,4 @@
+
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,7 +9,7 @@ namespace testbed;
 
 public class MariaDbContainer : TestContainer
 {
-    private readonly TestcontainersContainer _container;
+    private readonly IContainer _container;
     private string? _connectionString;
     private string _password = "rootpassword";
     private string _username = "root";
@@ -21,11 +22,12 @@ public class MariaDbContainer : TestContainer
 
     public MariaDbContainer()
     {
-        _container = new TestcontainersBuilder<TestcontainersContainer>()
+        _container = new ContainerBuilder()
             .WithImage("mariadb:latest")
             .WithEnvironment("MARIADB_ROOT_PASSWORD", _password)
             .WithEnvironment("MARIADB_DATABASE", _database)
-            .WithPortBinding(_port, true)
+             .WithEnvironment("MYSQL_SQL_MODE", "STRICT_ALL_TABLES,ONLY_FULL_GROUP_BY,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION,ANSI_QUOTES")
+             .WithPortBinding(_port, true)
             .WithExposedPort(_port)
             .Build();
     }

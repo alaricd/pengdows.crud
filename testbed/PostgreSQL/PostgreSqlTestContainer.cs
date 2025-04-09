@@ -1,14 +1,16 @@
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
+
+namespace testbed;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using pengdows.crud;
-using DotNet.Testcontainers.Containers;
-using DotNet.Testcontainers.Builders;
 
-namespace testbed;
+
 
 public class PostgreSqlTestContainer : TestContainer  
 {
-    private readonly TestcontainersContainer _container;
+    private readonly IContainer _container;
     private string? _connectionString;
     private string _password = "mysecretpassword";
     private string _username = "postgres";
@@ -17,7 +19,7 @@ public class PostgreSqlTestContainer : TestContainer
 
     public PostgreSqlTestContainer()
     {
-        _container = new TestcontainersBuilder<TestcontainersContainer>()
+        _container = new  ContainerBuilder()
             .WithImage("postgres:latest")
             .WithEnvironment("POSTGRES_PASSWORD", _password)
             .WithEnvironment("POSTGRES_USER", _username)

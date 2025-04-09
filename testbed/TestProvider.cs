@@ -7,6 +7,7 @@ public class TestProvider : IAsyncTestProvider
     private readonly IDatabaseContext _context;
     private readonly EntityHelper<TestTable, long> _helper;
 
+    private readonly Random _random = new();
 
     public TestProvider(IDatabaseContext databaseContext, IServiceProvider serviceProvider)
     {
@@ -17,16 +18,18 @@ public class TestProvider : IAsyncTestProvider
 
     public async Task RunTest()
     {
+        _random.Next();
         Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.Product.ToString());
         try
         {
             await CreateTable();
 
-            await InsertTestRows();
+            var id = await InsertTestRows();
             await CountTestRows();
-            var obj = await RetrieveRows();
+            var obj = await RetrieveRows(id);
 
             await DeletedRow(obj);
+            await TestTransactions();
         }
         catch (Exception ex)
         {
@@ -38,12 +41,51 @@ public class TestProvider : IAsyncTestProvider
         }
     }
 
-    public virtual async Task CountTestRows()
+    private async Task TestTransactions()
     {
-        var sc = _context.CreateSqlContainer();
+        var count = await CountTestRows();
+
+        await TestRollbackTransaction();
+        var count2 = await CountTestRows();
+        if (count != count2)
+        {
+            Console.WriteLine("Failed to rollback transactions: " + count);
+            throw new Exception("Failed to rollback transactions: " + count);
+        }
+        
+        await TestCommitTransaction();
+        var count3 = await CountTestRows();
+        if (count3 == count2)
+        {
+            Console.WriteLine("Failed to commit transactions: " + count);
+            throw new Exception("Failed to commit transactions: " + count);
+        }
+    }
+
+    private async Task TestCommitTransaction()
+    {
+        var transaction = _context.BeginTransaction();
+        var id = await InsertTestRows(transaction);
+        var count = await CountTestRows(transaction);
+        transaction.Commit();
+    }
+
+    private async Task TestRollbackTransaction()
+    {
+        var transaction = _context.BeginTransaction();
+        var id = await InsertTestRows(transaction);
+        var count = await CountTestRows(transaction);
+        transaction.Rollback();
+    }
+
+    public virtual async Task<int> CountTestRows(IDatabaseContext? db= null)
+    {
+        var ctx = db ?? _context;
+        var sc = ctx.CreateSqlContainer();
         sc.Query.AppendFormat("SELECT COUNT(*) FROM {0}", _helper.WrappedTableName);
         var count = await sc.ExecuteScalarAsync<int>();
         Console.WriteLine($"Count: {count}");
+        return count;
     }
 
     public virtual async Task CreateTable()
@@ -57,7 +99,7 @@ public class TestProvider : IAsyncTestProvider
         {
             await sqlContainer.ExecuteNonQueryAsync();
         }
-        catch (Exception ex) //when (ex.Number == 942)
+        catch
         {
             // Table did not exist, ignore
         }
@@ -86,7 +128,7 @@ CREATE TABLE {0}test_table{1} (
                 sqlContainer.Query.AppendFormat("TRUNCATE TABLE {0}test_table{1}", qp, qs);
                 await sqlContainer.ExecuteNonQueryAsync();
             }
-            catch (Exception ex)
+            catch
             {
                 //eat error quitely if it doesn't support truncate table
             }
@@ -95,21 +137,26 @@ CREATE TABLE {0}test_table{1} (
         }
     }
 
-    private async Task InsertTestRows()
+    private async Task<long> InsertTestRows(IDatabaseContext? db = null)
     {
+        var ctx = db ?? _context;
+        var name = ctx is TransactionContext ? NameEnum.Test2 : NameEnum.Test;
         var t = new TestTable
         {
-            Id = 1,
-            Name = NameEnum.Test,
-            Description = "Test Description"
+            Id = _random.Next(),
+            Name = name,
+            Description = ctx.GenerateRandomName()
         };
-        var sq = _helper.BuildCreate(t);
+        var sq = _helper.BuildCreate(t, ctx);
         await sq.ExecuteNonQueryAsync();
+        return t.Id;
     }
 
-    private async Task<TestTable> RetrieveRows()
+    private async Task<TestTable> RetrieveRows(long id, IDatabaseContext? db = null)
     {
-        var sc = _helper.BuildRetrieve([1]);
+        var arr = new List<long>() { id };
+        var ctx = db ?? _context;
+        var sc = _helper.BuildRetrieve(arr, ctx);
 
         Console.WriteLine(sc.Query.ToString());
 
@@ -122,9 +169,10 @@ CREATE TABLE {0}test_table{1} (
         return x.First();
     }
 
-    private async Task DeletedRow(TestTable t)
+    private async Task DeletedRow(TestTable t, IDatabaseContext? db = null)
     {
-        var sc = _helper.BuildDelete(t.Id);
+        var ctx = db ?? _context;
+        var sc = _helper.BuildDelete(t.Id, ctx);
         var count = await sc.ExecuteNonQueryAsync();
         if (count != 1) throw new Exception("Delete failed");
     }

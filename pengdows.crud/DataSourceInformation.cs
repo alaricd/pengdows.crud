@@ -1,6 +1,10 @@
+#region
+
 using System.Data;
 using System.Data.Common;
 using System.Text.RegularExpressions;
+
+#endregion
 
 namespace pengdows.crud;
 
@@ -22,7 +26,7 @@ public class DataSourceInformation : IDataSourceInformation
             _supportsNamedParameters = GetColumnValue<bool?>(metaDataRow, "SupportsNamedParameters");
             ParameterMarker = GetColumnValue<string>(metaDataRow, "ParameterMarkerFormat", "?");
             ParameterNameMaxLength = GetColumnValue(metaDataRow, "ParameterNameMaxLength", 0);
-            ParameterNamePatternRegex = new Regex("[a-zA-Z][a-zA-Z0-9_]*"); 
+            ParameterNamePatternRegex = new Regex("[a-zA-Z][a-zA-Z0-9_]*");
             CompositeIdentifierSeparator = ".";
 
             if (Product != SupportedDatabase.Unknown)
@@ -82,7 +86,7 @@ public class DataSourceInformation : IDataSourceInformation
         SupportedDatabase.SqlServer => true,
         SupportedDatabase.Oracle => true,
         SupportedDatabase.Firebird => true,
-        SupportedDatabase.Db2 => true,
+        //SupportedDatabase.Db2 => true,
         _ => false
     };
 
@@ -96,25 +100,11 @@ public class DataSourceInformation : IDataSourceInformation
         _ => false
     };
 
-    private static int GetMaxParameterLimitFor(SupportedDatabase db) => db switch
-    {
-        SupportedDatabase.SqlServer => 2100,
-        SupportedDatabase.Sqlite => 999,
-        SupportedDatabase.MySql => 65535,
-        SupportedDatabase.MariaDb => 65535,
-        SupportedDatabase.PostgreSql => 65535,
-        SupportedDatabase.CockroachDb => 65535,
-        SupportedDatabase.Oracle => 1000,
-        SupportedDatabase.Firebird => 1499,
-        SupportedDatabase.Db2 => 32767,
-        _ => 999
-    };
-
     public string GetDatabaseVersion(DbConnection connection)
     {
         try
         {
-            string versionQuery = Product switch
+            var versionQuery = Product switch
             {
                 SupportedDatabase.SqlServer => "SELECT @@VERSION",
                 SupportedDatabase.MySql => "SELECT VERSION()",
@@ -140,14 +130,28 @@ public class DataSourceInformation : IDataSourceInformation
         }
     }
 
+    private static int GetMaxParameterLimitFor(SupportedDatabase db)
+    {
+        return db switch
+        {
+            SupportedDatabase.SqlServer => 2100,
+            SupportedDatabase.Sqlite => 999,
+            SupportedDatabase.MySql => 65535,
+            SupportedDatabase.MariaDb => 65535,
+            SupportedDatabase.PostgreSql => 65535,
+            SupportedDatabase.CockroachDb => 65535,
+            SupportedDatabase.Oracle => 1000,
+            SupportedDatabase.Firebird => 1499,
+            //SupportedDatabase.Db2 => 32767,
+            _ => 999
+        };
+    }
+
     public DataTable GetSchema(DbConnection connection)
     {
         try
         {
-            if (!isSqlite(connection))
-            {
-                return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
-            }
+            if (!isSqlite(connection)) return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
 
 
             var dt = BuildEmptySchema(
@@ -260,7 +264,7 @@ public class DataSourceInformation : IDataSourceInformation
             SupportedDatabase.Oracle => ProcWrappingStyle.Oracle,
             SupportedDatabase.MySql => ProcWrappingStyle.Call,
             SupportedDatabase.MariaDb => ProcWrappingStyle.Call,
-            SupportedDatabase.Db2 => ProcWrappingStyle.Call,
+            //SupportedDatabase.Db2 => ProcWrappingStyle.Call,
             SupportedDatabase.PostgreSql => ProcWrappingStyle.PostgreSQL,
             SupportedDatabase.CockroachDb => ProcWrappingStyle.PostgreSQL,
             SupportedDatabase.Firebird => ProcWrappingStyle.ExecuteProcedure,
@@ -270,13 +274,18 @@ public class DataSourceInformation : IDataSourceInformation
 
     private void InferQuoteCharacters()
     {
-        (QuotePrefix, QuoteSuffix) = Product switch
-        {
-            SupportedDatabase.MySql => ("`", "`"),
-            SupportedDatabase.MariaDb => ("`", "`"),
-            SupportedDatabase.SqlServer => ("[", "]"),
-            _ => ("\"", "\"")
-        };
+        // (QuotePrefix, QuoteSuffix) = Product switch
+        // {
+        //     SupportedDatabase.MySql => ("`", "`"),
+        //     SupportedDatabase.MariaDb => ("`", "`"),
+        //     SupportedDatabase.SqlServer => ("[", "]"),
+        //     _ => ("\"", "\"")
+        // };
+        //In DatabaseContext.SetupConnectionSessionSettingsForProvider,
+        //we are now setting session settings in maria/mysql to use doublequotes for identifiers
+        //and apostrophes for string literals, like standard sql databases.
+        //MS-sql is also getting QUOTED_IDENTIFIERS set to ON  in CheckForSqlServerSettings
+        QuotePrefix = QuoteSuffix = "\"";  
     }
 
     private T GetColumnValue<T>(DataRow row, string columnName, T defaultValue = default)
@@ -320,7 +329,7 @@ public class DataSourceInformation : IDataSourceInformation
         if (name.Contains("oracle")) return SupportedDatabase.Oracle;
         if (name.Contains("sqlite")) return SupportedDatabase.Sqlite;
         if (name.Contains("firebird")) return SupportedDatabase.Firebird;
-        if (name.Contains("db2")) return SupportedDatabase.Db2;
+        //if (name.Contains("db2")) return SupportedDatabase.Db2;
         return SupportedDatabase.Unknown;
     }
 }

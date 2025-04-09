@@ -1,3 +1,5 @@
+#region
+
 using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Linq.Expressions;
@@ -6,6 +8,8 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using pengdows.crud.attributes;
 using pengdows.crud.enums;
+
+#endregion
 
 namespace pengdows.crud;
 
@@ -16,12 +20,12 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     private readonly IDatabaseContext _context;
     private readonly ColumnInfo? _idColumn;
     private readonly string _parameterMarker;
+    private readonly IServiceProvider _serviceProvider;
     private readonly TableInfo _tableInfo;
     private readonly bool _usePositionalParameters;
 
     private readonly ColumnInfo? _versionColumn;
     private Type _userFieldType = null;
-    private readonly IServiceProvider _serviceProvider;
 
     public EntityHelper(IDatabaseContext databaseContext,
         IServiceProvider serviceProvider,
@@ -40,19 +44,16 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                 c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
                 c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
             )?.PropertyInfo.PropertyType;
-        if (propertyInfoPropertyType != null && _serviceProvider != null)
-        {
-            _userFieldType = propertyInfoPropertyType;
-        }
+        if (propertyInfoPropertyType != null && _serviceProvider != null) _userFieldType = propertyInfoPropertyType;
 
         _parameterMarker = _context.DataSourceInfo.ParameterMarker;
         _usePositionalParameters = _context.DataSourceInfo.ParameterMarker == "?";
 
         WrappedTableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
-                               ? this.WrapObjectName(_tableInfo.Schema) +
+                               ? WrapObjectName(_tableInfo.Schema) +
                                  _context.DataSourceInfo.CompositeIdentifierSeparator
                                : "")
-                           + this.WrapObjectName(_tableInfo.Name);
+                           + WrapObjectName(_tableInfo.Name);
         _idColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsId);
         _versionColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsVersion);
         EnumParseBehavior = enumParseBehavior;
@@ -110,10 +111,12 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
 
-    public Task<T?> RetrieveOneAsync(T objectToUpdate)
+    public Task<T?> RetrieveOneAsync(T objectToRetrieve, IDatabaseContext? context = null)
     {
-        var id = (TID)_idColumn.PropertyInfo.GetValue(objectToUpdate);
-        var sc = BuildRetrieve([id]);
+        var ctx = context ?? _context;
+        var id = (TID)_idColumn.PropertyInfo.GetValue(objectToRetrieve);
+        var list = new List<TID>() { id };
+        var sc = BuildRetrieve(list, null, ctx);
         return LoadSingleAsync(sc);
     }
 
@@ -134,33 +137,27 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         while (await reader.ReadAsync().ConfigureAwait(false))
         {
             var obj = MapReaderToObject(reader);
-            if (obj != null)
-            {
-                list.Add(obj);
-            }
+            if (obj != null) list.Add(obj);
         }
 
         return list;
     }
 
 
-    public ISqlContainer BuildCreate(T objectToCreate)
+    public ISqlContainer BuildCreate(T objectToCreate, IDatabaseContext? context = null)
     {
         if (objectToCreate == null)
             throw new ArgumentNullException(nameof(objectToCreate));
-
+        var ctx = context ?? _context;
         var columns = new StringBuilder();
         var values = new StringBuilder();
         var parameters = new List<DbParameter>();
         var pid = 0;
-        var sc = _context.CreateSqlContainer();
+        var sc = ctx.CreateSqlContainer();
         SetAuditFields(objectToCreate, false);
         foreach (var column in _tableInfo.Columns.Values)
         {
-            if (column.IsId && !column.IsIdIsWritable)
-            {
-                continue;
-            }
+            if (column.IsId && !column.IsIdIsWritable) continue;
 
             if (columns.Length > 0)
             {
@@ -175,7 +172,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                 value
             );
 
-            columns.Append(this.WrapObjectName(column.Name));
+            columns.Append(WrapObjectName(column.Name));
             if (Utils.IsNullOrDbNull(value))
             {
                 values.Append("NULL");
@@ -200,72 +197,40 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
 
-    private void SetAuditFields(T obj, bool updateOnly)
-    {
-        if (_userFieldType == null || _serviceProvider == null || obj == null)
-            return;
-
-        var (userId, now) = AuditFieldResolver.ResolveFrom(_userFieldType, _serviceProvider);
-
-        // Always update last-modified
-        _tableInfo.LastUpdatedBy?.PropertyInfo?.SetValue(obj, userId);
-        _tableInfo.LastUpdatedOn?.PropertyInfo?.SetValue(obj, now);
-
-        if (updateOnly) return;
-
-        // Only set Created fields if they are null or default
-        if (_tableInfo.CreatedBy?.PropertyInfo != null)
-        {
-            var currentValue = _tableInfo.CreatedBy.PropertyInfo.GetValue(obj);
-            if (currentValue == null
-                || currentValue as string == string.Empty
-                || Utils.IsZeroNumeric(currentValue))
-            {
-                _tableInfo.CreatedBy.PropertyInfo.SetValue(obj, userId);
-            }
-        }
-
-        if (_tableInfo.CreatedOn?.PropertyInfo != null)
-        {
-            var currentValue = _tableInfo.CreatedOn.PropertyInfo.GetValue(obj) as DateTime?;
-            if (currentValue == null || currentValue == default(DateTime))
-            {
-                _tableInfo.CreatedOn.PropertyInfo.SetValue(obj, now);
-            }
-        }
-    }
-
-
-    public ISqlContainer BuildBaseRetrieve(string alias)
+    public ISqlContainer BuildBaseRetrieve(string alias, IDatabaseContext? context = null)
     {
         var wrappedAlias = "";
         if (!string.IsNullOrWhiteSpace(alias))
-            wrappedAlias = this.WrapObjectName(alias) +
+            wrappedAlias = WrapObjectName(alias) +
                            _context.DataSourceInfo.CompositeIdentifierSeparator;
-
-        var sc = _context.CreateSqlContainer();
+        var ctx = context ?? _context;
+        var sc = ctx.CreateSqlContainer();
         var sb = sc.Query;
         sb.Append("SELECT ");
         sb.Append(string.Join(", ", _tableInfo.Columns.Values.Select(col => string.Format("{0}{1}",
             wrappedAlias,
-            this.WrapObjectName(col.Name)))));
-        sb.Append(" FROM ").Append(WrappedTableName);
-        sb.Append(" " + wrappedAlias.Substring(0, wrappedAlias.Length - 1));
+            WrapObjectName(col.Name)))));
+        sb.Append("\nFROM ").Append(WrappedTableName);
+        if (wrappedAlias.Length > 0)
+        {
+            sb.Append(" " + wrappedAlias.Substring(0, wrappedAlias.Length - 1));
+        }
 
         return sc;
     }
 
     public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null,
-        string alias = "a")
+        string alias = "a", IDatabaseContext? context = null)
     {
-        var sc = BuildBaseRetrieve(alias);
+        var ctx = context ?? _context;
+        var sc = BuildBaseRetrieve(alias, ctx);
         var wrappedAlias = "";
         if (!string.IsNullOrWhiteSpace(alias))
-            wrappedAlias = this.WrapObjectName(alias) +
+            wrappedAlias = WrapObjectName(alias) +
                            _context.DataSourceInfo.CompositeIdentifierSeparator;
 
         var wrappedColumnName = wrappedAlias +
-                                this.WrapObjectName(_idColumn.Name);
+                                WrapObjectName(_idColumn.Name);
         BuildWhere(
             wrappedColumnName,
             listOfIds,
@@ -276,16 +241,17 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
     public ISqlContainer BuildRetrieve(List<T>? listOfObjects = null,
-        string alias = "a")
+        string alias = "a", IDatabaseContext context = null)
     {
-        var sc = BuildBaseRetrieve(alias);
+        var ctx = context ?? _context;
+        var sc = BuildBaseRetrieve(alias, ctx);
         var wrappedAlias = "";
         if (!string.IsNullOrWhiteSpace(alias))
-            wrappedAlias = this.WrapObjectName(alias) +
+            wrappedAlias = WrapObjectName(alias) +
                            _context.DataSourceInfo.CompositeIdentifierSeparator;
 
         var wrappedColumnName = wrappedAlias +
-                                this.WrapObjectName(_idColumn.Name);
+                                WrapObjectName(_idColumn.Name);
         BuildWhereByPrimaryKey(
             listOfObjects,
             sc);
@@ -293,18 +259,24 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return sc;
     }
 
+    public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null)
+    {
+        return BuildRetrieve(listOfIds, null, context);
+    }
+
+    public ISqlContainer BuildRetrieve(List<T>? listOfObjects = null, IDatabaseContext? context = null)
+    {
+        return BuildRetrieve(listOfObjects, null, context);
+    }
+
     public void BuildWhereByPrimaryKey(List<T>? listOfObjects, ISqlContainer sc, string alias = "")
     {
         if (Utils.IsNullOrEmpty(listOfObjects) || listOfObjects.All(o => o == null || sc == null))
-        {
-           throw new ArgumentException("List of objects cannot be null or empty.");
-        }
+            throw new ArgumentException("List of objects cannot be null or empty.");
 
         var listOfPrimaryKeys = _tableInfo.Columns.Values.Where(o => o.IsPrimaryKey).ToList();
         if (listOfPrimaryKeys == null || listOfPrimaryKeys.Count < 1)
-        {
             throw new Exception($"No primary keys found for type {typeof(T).Name}");
-        }
 
         var sb = new StringBuilder();
         var pp = new List<DbParameter>();
@@ -320,27 +292,29 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
         foreach (var o in listOfObjects)
         {
-            if (numberOfEntities > 0)
-            {
-                sb.Append(") OR (");
-            }
+            if (numberOfEntities > 0) sb.Append(") OR (");
 
             var numberOfProperties = 0;
             foreach (var pk in listOfPrimaryKeys)
             {
-                if (numberOfProperties > 0)
-                {
-                    sb.Append(" AND ");
-                }
+                if (numberOfProperties > 0) sb.Append(" AND ");
 
                 //TODO: broken
                 var value = pk.MakeParameterValueFromField(o);
                 var p = _context.CreateDbParameter(pk.DbType, value);
                 sb.Append(wrappedAlias);
                 sb.Append(WrapObjectName(pk.Name));
-                sb.Append("=");
-                sb.Append(MakeParameterName(p));
-                pp.Add(p);
+                if (Utils.IsNullOrDbNull(value))
+                {
+                    sb.Append(" IS NULL");
+                }
+                else
+                {
+                    sb.Append(" = ");
+                    sb.Append(MakeParameterName(p));
+                    pp.Add(p);
+                }
+
                 numberOfProperties++;
             }
 
@@ -348,34 +322,24 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         }
 
 
-        if (sb.Length < 1)
-        {
-            return;
-        }
+        if (sb.Length < 1) return;
 
 
         sc.AppendParameters(pp);
-        if (!sc.Query.ToString().Contains("WHERE "))
-        {
-            sc.Query.Append("\n WHERE ");
-        }
+        if (!sc.Query.ToString().Contains("WHERE ")) sc.Query.Append("\n WHERE ");
 
         sc.Query.Append(" (");
         sc.Query.Append(sb);
         sc.Query.Append(")");
     }
 
-    private string WrapObjectName(string objectName)
+    public Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, IDatabaseContext context = null)
     {
-        return _context.WrapObjectName(objectName);
+        var ctx = context ?? _context;
+        return BuildUpdateAsync(objectToUpdate, _versionColumn != null, ctx);
     }
 
-    public Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate)
-    {
-        return BuildUpdateAsync(objectToUpdate, _versionColumn != null, _context);
-    }
-
-    public async Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, bool loadOriginal = true,
+    public async Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, bool loadOriginal,
         IDatabaseContext? context = null)
     {
         if (objectToUpdate == null)
@@ -464,9 +428,10 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return sc;
     }
 
-    public ISqlContainer BuildDelete(TID id)
+    public ISqlContainer BuildDelete(TID id, IDatabaseContext? context = null)
     {
-        var sc = _context.CreateSqlContainer();
+        var ctx = context ?? _context;
+        var sc = ctx.CreateSqlContainer();
 
         var idCol = _idColumn;
         if (idCol == null)
@@ -478,7 +443,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         sc.Query.Append("DELETE FROM ")
             .Append(WrappedTableName)
             .Append(" WHERE ")
-            .Append(this.WrapObjectName(idCol.Name));
+            .Append(WrapObjectName(idCol.Name));
         if (Utils.IsNullOrDbNull(p.Value))
         {
             sc.Query.Append(" IS NULL ");
@@ -496,10 +461,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     public ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TID> ids, ISqlContainer sqlContainer)
     {
         var enumerable = ids?.Distinct().ToList();
-        if (Utils.IsNullOrEmpty(enumerable))
-        {
-            return sqlContainer;
-        }
+        if (Utils.IsNullOrEmpty(enumerable)) return sqlContainer;
 
 
         var hasNull = enumerable.Any(v => Utils.IsNullOrDbNull(v));
@@ -531,5 +493,42 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         sb.Insert(0, "\nWHERE ");
         sqlContainer.Query.Append(sb);
         return sqlContainer;
+    }
+
+
+    private void SetAuditFields(T obj, bool updateOnly)
+    {
+        if (_userFieldType == null || _serviceProvider == null || obj == null)
+            return;
+
+        var (userId, now) = AuditFieldResolver.ResolveFrom(_userFieldType, _serviceProvider);
+
+        // Always update last-modified
+        _tableInfo.LastUpdatedBy?.PropertyInfo?.SetValue(obj, userId);
+        _tableInfo.LastUpdatedOn?.PropertyInfo?.SetValue(obj, now);
+
+        if (updateOnly) return;
+
+        // Only set Created fields if they are null or default
+        if (_tableInfo.CreatedBy?.PropertyInfo != null)
+        {
+            var currentValue = _tableInfo.CreatedBy.PropertyInfo.GetValue(obj);
+            if (currentValue == null
+                || currentValue as string == string.Empty
+                || Utils.IsZeroNumeric(currentValue))
+                _tableInfo.CreatedBy.PropertyInfo.SetValue(obj, userId);
+        }
+
+        if (_tableInfo.CreatedOn?.PropertyInfo != null)
+        {
+            var currentValue = _tableInfo.CreatedOn.PropertyInfo.GetValue(obj) as DateTime?;
+            if (currentValue == null || currentValue == default(DateTime))
+                _tableInfo.CreatedOn.PropertyInfo.SetValue(obj, now);
+        }
+    }
+
+    private string WrapObjectName(string objectName)
+    {
+        return _context.WrapObjectName(objectName);
     }
 }

@@ -1,3 +1,4 @@
+
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Data.SqlClient;
@@ -8,7 +9,7 @@ namespace testbed;
 
 public class SqlServerTestContainer: TestContainer
 {
-    private readonly TestcontainersContainer _container;
+    private readonly IContainer _container;
     private string? _connectionString;
     private string _password = "YourPassword123";
     private string _username = "sa";
@@ -20,7 +21,7 @@ public class SqlServerTestContainer: TestContainer
     //     "Server=localhost;uid=sa;pwd=YourPassword123;Initial Catalog=testdb;TrustServerCertificate=true";
     public SqlServerTestContainer()
     {
-        _container = new TestcontainersBuilder<TestcontainersContainer>()
+        _container = new ContainerBuilder()
             .WithImage("mcr.microsoft.com/mssql/server")
             .WithEnvironment("MSSQL_SA_PASSWORD", _password)
             .WithEnvironment("ACCEPT_EULA", "Y")

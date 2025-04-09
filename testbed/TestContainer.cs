@@ -3,6 +3,7 @@ using DotNet.Testcontainers.Containers;
 using FirebirdSql.Data.FirebirdClient;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
+using ZstdSharp.Unsafe;
 
 namespace testbed;
 
@@ -13,51 +14,48 @@ public abstract class TestContainer : ITestContainer
         Func<IDatabaseContext, IServiceProvider, TTestProvider> testProviderFactory)
         where TTestProvider : TestProvider
     {
-        await this.StartAsync();
-        var dbContext = await this.GetDatabaseContextAsync(services);
+        await StartAsync();
+        var dbContext = await GetDatabaseContextAsync(services);
         var testProvider = testProviderFactory(dbContext, services);
 
-
-        Console.WriteLine($"Running test with container: {this.GetType().Name}");
+        Console.WriteLine($"Running test with container: {GetType().Name}");
         await testProvider.RunTest();
     }
-
 
     public abstract Task StartAsync();
 
     public abstract Task<IDatabaseContext> GetDatabaseContextAsync(IServiceProvider services);
 
-    protected async Task WaitForDbToStart(DbProviderFactory instance, string connectionString,
-        TestcontainersContainer container,
+    protected async Task WaitForDbToStart(DbProviderFactory instance, string connectionString, IContainer container,
         int numberOfSecondsToWait = 60)
     {
         var csb = instance.CreateConnectionStringBuilder();
         csb.ConnectionString = connectionString;
         var connection = instance.CreateConnection();
         connection.ConnectionString = csb.ConnectionString;
-        var millisecondsToWait = numberOfSecondsToWait * 1000;
-        for (
-            var dt = DateTime.Now;
-            (DateTime.Now - dt).TotalMilliseconds < millisecondsToWait;
-        )
+
+        var timeout = TimeSpan.FromSeconds(numberOfSecondsToWait);
+        var startTime = DateTime.UtcNow;
+
+        while (DateTime.UtcNow - startTime < timeout)
         {
             try
             {
                 await connection.OpenAsync();
-
                 await connection.CloseAsync();
                 return;
             }
             catch (OracleException ex)
             {
+                Console.WriteLine(ex);
                 await Task.Delay(1000);
             }
             catch (FbException ex) when (ex.Message.Contains("I/O error"))
             {
                 try
                 {
-                    var orig = csb as FbConnectionStringBuilder
-                               ?? throw new InvalidOperationException("Connection string builder is not valid.");
+                    if (csb is not FbConnectionStringBuilder orig)
+                        throw new InvalidOperationException("Connection string builder is not valid.");
 
                     var db = orig.Database;
                     if (string.IsNullOrWhiteSpace(db))
@@ -75,8 +73,8 @@ public abstract class TestContainer : ITestContainer
 
                     using var createConn = instance.CreateConnection();
                     createConn.ConnectionString = csbTemp.ConnectionString;
-                    //var createCmd = new FbCommand($"CREATE DATABASE '{db}';", createConn);
-                    using var createCmd = connection.CreateCommand();
+
+                    using var createCmd = createConn.CreateCommand();
                     createCmd.CommandText = $"CREATE DATABASE '{db}';";
 
                     await createConn.OpenAsync();
@@ -87,9 +85,9 @@ public abstract class TestContainer : ITestContainer
                     Console.WriteLine(ex1);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                await Task.Delay(1000); // 1 second delay between retries
+                await Task.Delay(1000);
             }
         }
 

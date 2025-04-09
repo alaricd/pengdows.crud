@@ -3,8 +3,15 @@ namespace testbed;
 using pengdows.crud;
 
 
-public class FirebirdTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : TestProvider(context, serviceProvider)
+public class FirebirdTestProvider:TestProvider
 {
+    private readonly IDatabaseContext context;
+
+    public FirebirdTestProvider(IDatabaseContext context, IServiceProvider serviceProvider)
+        : base(context, serviceProvider)
+    {
+        this.context = context;
+    }
     public override async Task CreateTable()
     {
         var databaseContext = context;

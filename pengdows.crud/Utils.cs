@@ -1,4 +1,8 @@
+#region
+
 using System.Collections;
+
+#endregion
 
 namespace pengdows.crud;
 
@@ -28,9 +32,9 @@ public class Utils
         };
     }
 
-    public static bool IsNullOrEmpty (ICollection enumerable)
+    public static bool IsNullOrEmpty(ICollection enumerable)
     {
-        if(enumerable == null) return true;
-        return (enumerable.Count == 0) ;
+        if (enumerable == null) return true;
+        return (enumerable.Count == 0);
     }
 }

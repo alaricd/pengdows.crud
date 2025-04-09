@@ -1,3 +1,5 @@
+#region
+
 using System.Data;
 using System.Data.Common;
 using System.Text;
@@ -5,25 +7,26 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using pengdows.crud.exceptions;
 
+#endregion
+
 namespace pengdows.crud;
 
 public class DatabaseContext : IDatabaseContext
 {
     private static readonly Random _random = new();
     private readonly DbProviderFactory _factory;
-    private bool _isReadConnection = true;
-    private bool _isWriteConnection = true;
+    private readonly ILogger<IDatabaseContext> _logger;
+    private bool _applyConnectionSessionSettings;
     private DbConnection? _connection;
 
     private long _connectionCount;
-    private DataSourceInformation _dataSourceInfo;
-    private bool _isSqlServer;
     private string _connectionSessionSettings;
+    private DataSourceInformation _dataSourceInfo;
+    private bool _isReadConnection = true;
+    private bool _isSqlServer;
+    private bool _isWriteConnection = true;
     private int _numberOfOpenConnections;
-    private bool _applyConnectionSessionSettings;
-    private readonly ILogger<IDatabaseContext> _logger;
-
-    public string Name { get; set; }
+    public ReadWriteMode ReadWriteMode { get; }
 
     public DatabaseContext(string connectionString,
         DbProviderFactory factory,
@@ -32,12 +35,15 @@ public class DatabaseContext : IDatabaseContext
         ReadWriteMode readWriteMode = ReadWriteMode.ReadWrite,
         ILogger<IDatabaseContext> logger = null)
     {
+        ReadWriteMode = readWriteMode;
         TypeMapRegistry = typeMapRegistry ?? new TypeMapRegistry();
         ConnectionMode = mode;
         _factory = factory;
         _logger = logger ?? NullLogger<IDatabaseContext>.Instance;
         InitializeInternals(connectionString, mode, readWriteMode);
     }
+
+    public string Name { get; set; }
 
     private string ConnectionString { get; set; }
 
@@ -80,10 +86,7 @@ public class DatabaseContext : IDatabaseContext
 
     public TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
     {
-        if (!_isWriteConnection && isolationLevel is null)
-        {
-            isolationLevel = IsolationLevel.RepeatableRead;
-        }
+        if (!_isWriteConnection && isolationLevel is null) isolationLevel = IsolationLevel.RepeatableRead;
 
         isolationLevel ??= IsolationLevel.ReadCommitted;
 
@@ -95,6 +98,7 @@ public class DatabaseContext : IDatabaseContext
 
 
     public string CompositeIdentifierSeparator => _dataSourceInfo.CompositeIdentifierSeparator;
+    public SupportedDatabase Product => _dataSourceInfo.Product;
 
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
@@ -111,10 +115,7 @@ public class DatabaseContext : IDatabaseContext
         p.ParameterName = name;
         p.DbType = type;
         p.Value = valueIsNull ? DBNull.Value : value;
-        if (!valueIsNull && p.DbType == DbType.String && value is string s)
-        {
-            p.Size = Math.Max(s.Length, 1);
-        }
+        if (!valueIsNull && p.DbType == DbType.String && value is string s) p.Size = Math.Max(s.Length, 1);
 
         return p;
     }
@@ -125,11 +126,10 @@ public class DatabaseContext : IDatabaseContext
         switch (ConnectionMode)
         {
             case DbMode.Standard:
+            case DbMode.KeepAlive:
                 return GetStandardConnection();
-            case DbMode.SqlExpressUserMode:
-                return GetSqlExpressUserModeConnection();
-            case DbMode.SqlCe:
-                return GetSqlCeConnection(executionType);
+            case DbMode.SingleWriter:
+                return GetSingleWriterConnection(executionType);
             case DbMode.SingleConnection:
                 return GetSingleConnection();
             default:
@@ -191,32 +191,23 @@ public class DatabaseContext : IDatabaseContext
 
     public void AssertIsReadConnection()
     {
-        if (!_isReadConnection)
-        {
-            throw new InvalidOperationException("The connection is not read connection.");
-        }
+        if (!_isReadConnection) throw new InvalidOperationException("The connection is not read connection.");
     }
 
     public void AssertIsWriteConnection()
     {
-        if (!_isWriteConnection)
-        {
-            throw new InvalidOperationException("The connection is not write connection.");
-        }
+        if (!_isWriteConnection) throw new InvalidOperationException("The connection is not write connection.");
     }
 
     public void CloseAndDisposeConnection(DbConnection connection)
     {
-        if (connection == null)
-        {
-            return;
-        }
+        if (connection == null) return;
 
         _logger.LogInformation($"Connection mode is: {ConnectionMode}");
         switch (ConnectionMode)
         {
             case DbMode.SingleConnection:
-            case DbMode.SqlCe:
+            case DbMode.SingleWriter:
                 if (_connection != connection)
                 {
                     //never close our single write connection
@@ -226,9 +217,18 @@ public class DatabaseContext : IDatabaseContext
 
                 break;
             case DbMode.Standard:
-            case DbMode.SqlExpressUserMode:
+            case DbMode.KeepAlive:
                 _logger.LogInformation("Closing a standard connection");
-                connection.Dispose();
+                try
+                {
+                    connection.Close();
+                    connection.Dispose();
+                }
+                catch
+                {
+                    _logger.LogInformation("Connection closed");
+                }
+
                 break;
             default:
                 throw new NotSupportedException("Unsupported connection mode.");
@@ -246,6 +246,12 @@ public class DatabaseContext : IDatabaseContext
 
     public int MaxParameterLimit => _dataSourceInfo.MaxParameterLimit;
 
+    public long NumberOfOpenConnections => Interlocked.Read(ref _connectionCount);
+
+    public string QuotePrefix => DataSourceInfo.QuotePrefix;
+
+    public string QuoteSuffix => DataSourceInfo.QuoteSuffix;
+  
     private void CheckForSqlServerSettings(DbConnection conn)
     {
         _isSqlServer =
@@ -274,10 +280,7 @@ public class DatabaseContext : IDatabaseContext
         while (reader.Read())
         {
             var key = reader.GetString(0).ToUpperInvariant();
-            if (settings.ContainsKey(key))
-            {
-                currentSettings[key] = reader.GetString(1) == "SET" ? "ON" : "OFF";
-            }
+            if (settings.ContainsKey(key)) currentSettings[key] = reader.GetString(1) == "SET" ? "ON" : "OFF";
         }
 
         var sb = CompareResults(settings, currentSettings);
@@ -300,10 +303,7 @@ public class DatabaseContext : IDatabaseContext
             recorded.TryGetValue(expectedKvp.Key, out var result);
             if (result != expectedKvp.Value)
             {
-                if (sb.Length > 0)
-                {
-                    sb.AppendLine();
-                }
+                if (sb.Length > 0) sb.AppendLine();
 
                 sb.Append($"SET {expectedKvp.Key} {expectedKvp.Value}");
             }
@@ -334,9 +334,9 @@ public class DatabaseContext : IDatabaseContext
             }
 
             _dataSourceInfo = new DataSourceInformation(conn);
-            SetupPreambleForProvider(conn);
+            SetupConnectionSessionSettingsForProvider(conn);
             ConnectionString = csb.ConnectionString;
-            this.Name = _dataSourceInfo.DatabaseProductName;
+            Name = _dataSourceInfo.DatabaseProductName;
             if (_dataSourceInfo.Product == SupportedDatabase.Sqlite
                 && "Data Source=:memory:" == ConnectionString)
             {
@@ -358,7 +358,7 @@ public class DatabaseContext : IDatabaseContext
         }
     }
 
-    private void SetupPreambleForProvider(DbConnection conn)
+    private void SetupConnectionSessionSettingsForProvider(DbConnection conn)
     {
         switch (_dataSourceInfo.Product)
         {
@@ -370,7 +370,7 @@ public class DatabaseContext : IDatabaseContext
             case SupportedDatabase.MySql:
             case SupportedDatabase.MariaDb:
                 _connectionSessionSettings =
-                    "SET SESSION sql_mode = 'STRICT_ALL_TABLES,ONLY_FULL_GROUP_BY,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION';\n";
+                    "SET SESSION sql_mode = 'STRICT_ALL_TABLES,ONLY_FULL_GROUP_BY,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION,ANSI_QUOTES';\n";
                 break;
 
             case SupportedDatabase.PostgreSql:
@@ -398,10 +398,11 @@ public class DatabaseContext : IDatabaseContext
                 // has to be done in connection string, not session;
                 break;
 
-            case SupportedDatabase.Db2:
-                _connectionSessionSettings = @"
-                 SET CURRENT DEGREE = 'ANY';
-";
+                //DB 2 can't be supported under modern .net 
+//             case SupportedDatabase.Db2:
+//                 _connectionSessionSettings = @"
+//                  SET CURRENT DEGREE = 'ANY';
+// ";
                 break;
 
             default:
@@ -421,12 +422,6 @@ public class DatabaseContext : IDatabaseContext
         return conn;
     }
 
-    public long NumberOfOpenConnections => Interlocked.Read(ref _connectionCount);
-
-    public string QuotePrefix => DataSourceInfo.QuotePrefix;
-
-    public string QuoteSuffix => DataSourceInfo.QuoteSuffix;
-
     private void AddStateChangeHandler(DbConnection connection)
     {
         connection.StateChange += (sender, args) =>
@@ -438,10 +433,7 @@ public class DatabaseContext : IDatabaseContext
                     break;
                 case ConnectionState.Open:
                     Interlocked.Increment(ref _connectionCount);
-                    if (args.OriginalState == ConnectionState.Closed)
-                    {
-                        ApplyConnectionSessionSettings(connection);
-                    }
+                    ApplyConnectionSessionSettings(connection);
 
                     break;
                 case ConnectionState.Closed:
@@ -459,8 +451,8 @@ public class DatabaseContext : IDatabaseContext
                     break;
             }
 
-            var info = String.Format("{1} now has open connections:{0}", _connectionCount,
-                DataSourceInfo?.Product.ToString() ?? String.Empty);
+            var info = string.Format("{1} now has open connections:{0}", Interlocked.Read(ref _connectionCount),
+                DataSourceInfo?.Product.ToString() ?? string.Empty);
             _logger.LogInformation(info);
         };
     }
@@ -486,19 +478,12 @@ public class DatabaseContext : IDatabaseContext
         return Connection;
     }
 
-    private DbConnection GetSqlCeConnection(ExecutionType type)
+    private DbConnection GetSingleWriterConnection(ExecutionType type)
     {
         if (ExecutionType.Read == type) return GetStandardConnection();
 
         return Connection;
     }
-
-    private DbConnection GetSqlExpressUserModeConnection()
-    {
-        //Just return a new connection, leaving the 1 connection open;
-        return GetStandardConnection();
-    }
-
 
     private void Dispose(bool disposing)
     {

@@ -1,16 +1,16 @@
 using System.Data.Common;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 
 using pengdows.crud;
-using DotNet.Testcontainers.Containers;
-using DotNet.Testcontainers.Builders;
 using FirebirdSql.Data.FirebirdClient;
  
 namespace testbed;
 
 public class FirebirdSqlTestContainer : TestContainer
 {
-    private readonly TestcontainersContainer _container;
+    private readonly IContainer _container;
     private string? _connectionString;
     private string _password = "mysecretpassword";
     private string _username = "SYSDBA";
@@ -34,7 +34,7 @@ public class FirebirdSqlTestContainer : TestContainer
         // You must inform a password in FIREBIRD_PASSWORD variable. Otherwise the container initialization will fail.
         // FIREBIRD_DATABASE
         //-u SYSDBA
-        _container = new TestcontainersBuilder<TestcontainersContainer>()
+        _container = new ContainerBuilder()
             .WithImage("firebirdsql/firebird")
             .WithPortBinding(3050, true)
             .WithEnvironment("ISC_PASSWORD", _password)
@@ -65,9 +65,7 @@ public class FirebirdSqlTestContainer : TestContainer
                 CommandTimeout = 30
             }.ToString();
             Console.WriteLine($"Connecting to {_connectionString}");
-      
-          
-
+            
             await WaitForDbToStart(_factory, _connectionString, _container);
         }
         catch (Exception ex)

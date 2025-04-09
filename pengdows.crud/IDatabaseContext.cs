@@ -1,11 +1,16 @@
-﻿using System.Data;
+﻿#region
+
+using System.Data;
 using System.Data.Common;
+using System.Security.Cryptography;
+
+#endregion
 
 namespace pengdows.crud;
 
 public interface IDatabaseContext : IDisposable
 {
-     DbMode ConnectionMode { get; }
+    DbMode ConnectionMode { get; }
     ITypeMapRegistry TypeMapRegistry { get; }
     IDataSourceInformation DataSourceInfo { get; }
     string SessionSettingsPreamble { get; }
@@ -13,13 +18,13 @@ public interface IDatabaseContext : IDisposable
     int MaxParameterLimit { get; }
     long NumberOfOpenConnections { get; }
 
-    string QuotePrefix
-    {
-        get;
-    }
+    string QuotePrefix { get; }
 
     string QuoteSuffix { get; }
     string CompositeIdentifierSeparator { get; }
+
+    SupportedDatabase Product { get; }
+
     ISqlContainer CreateSqlContainer(string? query = null);
     DbParameter CreateDbParameter<T>(string name, DbType type, T value);
     DbConnection GetConnection(ExecutionType executionType);

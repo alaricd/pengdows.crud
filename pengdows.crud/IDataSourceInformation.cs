@@ -1,5 +1,9 @@
+#region
+
 using System.Data.Common;
 using System.Text.RegularExpressions;
+
+#endregion
 
 namespace pengdows.crud;
 

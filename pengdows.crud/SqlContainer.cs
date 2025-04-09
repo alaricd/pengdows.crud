@@ -1,18 +1,22 @@
+#region
+
 using System.Data;
 using System.Data.Common;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+#endregion
+
 namespace pengdows.crud;
 
 public class SqlContainer : ISqlContainer
 {
     private readonly IDatabaseContext _context;
-    private readonly List<DbParameter> _parameters = new();
-    private bool _disposed;
 
     private readonly ILogger<ISqlContainer> _logger;
+    private readonly List<DbParameter> _parameters = new();
+    private bool _disposed;
 
     internal SqlContainer(IDatabaseContext context, ILogger<ISqlContainer> logger = null)
     {
@@ -130,13 +134,19 @@ public class SqlContainer : ISqlContainer
 
     public DbCommand CreateCommand(DbConnection conn)
     {
-        return conn.CreateCommand();
+        var cmd = conn.CreateCommand();
+        if (_context is TransactionContext transactionContext)
+        {
+            cmd.Transaction = transactionContext.Transaction;
+        }
+
+        return cmd;
     }
 
     public void Clear()
     {
-        this.Query.Clear();
-        this._parameters.Clear();
+        Query.Clear();
+        _parameters.Clear();
     }
 
     public string WrapForStoredProc(ExecutionType executionType)
@@ -169,10 +179,7 @@ public class SqlContainer : ISqlContainer
 
     private DbCommand PrepareCommand(DbConnection conn, CommandType commandType, ExecutionType executionType)
     {
-        if (commandType == CommandType.TableDirect)
-        {
-            throw new NotSupportedException("TableDirect isn't supported.");
-        }
+        if (commandType == CommandType.TableDirect) throw new NotSupportedException("TableDirect isn't supported.");
 
         OpenConnection(conn);
         var cmd = CreateCommand(conn);
@@ -212,7 +219,7 @@ public class SqlContainer : ISqlContainer
                 cmd.Disposed += (_, __) =>
                 {
                     _logger.LogInformation("Disposed Command that couldn't be cleaned up earlier: " +
-                                      _context.DataSourceInfo.DatabaseProductName);
+                                           _context.DataSourceInfo.DatabaseProductName);
                 };
                 if (conn != null)
                     conn.Disposed += (_, __) =>
@@ -233,9 +240,7 @@ public class SqlContainer : ISqlContainer
             //leave the connection open for reads until we dispose them.
             return;
         if (!(_context is TransactionContext)) //  && executionType == ExecutionType.Write) 
-        {
             _context.CloseAndDisposeConnection(conn);
-        }
     }
 
     public string WrapObjectName(string objectName)

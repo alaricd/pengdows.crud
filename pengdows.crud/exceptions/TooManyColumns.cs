@@ -1,7 +1,9 @@
 namespace pengdows.crud.exceptions;
 
-public class TooManyColumns(string message) 
-    : Exception(message)
+public class TooManyColumns
+    : Exception
 {
-    
+    public TooManyColumns(string message) : base(message)
+    {
+    }
 }
