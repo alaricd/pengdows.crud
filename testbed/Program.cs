@@ -13,24 +13,24 @@ builder.Services.AddScoped<IAuditContextProvider<string>, StringAuditContextProv
 builder.Services.AddSingleton<ITypeMapRegistry, TypeMapRegistry>();
 
 var host = builder.Build();
-//
-// using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory.Instance,
-//            host.Services.GetRequiredService<ITypeMapRegistry>()))
-// {
-//     var lite = new TestProvider(liteDb, host.Services);
-//     await lite.RunTest();
-//     
-// }
-//
-// await using (var my = new MySqlTestContainer())
-// {
-//     await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
-// }
-//
-// var maria = new MariaDbContainer();
-// await maria.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
-// var pg = new PostgreSqlTestContainer();
-// await pg.RunTestWithContainerAsync<PostgreSQLTest>(host.Services, (db, sp) => new PostgreSQLTest(db, sp));
+
+using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory.Instance,
+           host.Services.GetRequiredService<ITypeMapRegistry>()))
+{
+    var lite = new TestProvider(liteDb, host.Services);
+    await lite.RunTest();
+    
+}
+
+await using (var my = new MySqlTestContainer())
+{
+    await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
+}
+
+var maria = new MariaDbContainer();
+await maria.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
+var pg = new PostgreSqlTestContainer();
+await pg.RunTestWithContainerAsync<PostgreSQLTest>(host.Services, (db, sp) => new PostgreSQLTest(db, sp));
 var ms = new SqlServerTestContainer();
 await ms.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
 // var o = new OracleTestContainer();
