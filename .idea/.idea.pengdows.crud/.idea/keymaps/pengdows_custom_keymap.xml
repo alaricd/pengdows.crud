@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<keymap version="1" name="PengdowsCustom" parent="$default">
+  <action id="ReformatCode">
+    <keyboard-shortcut first-keystroke="ctrl K" second-keystroke="ctrl D"/>
+  </action>
+  <action id="SurroundWith">
+    <keyboard-shortcut first-keystroke="ctrl E" second-keystroke="U"/>
+  </action>
+</keymap>

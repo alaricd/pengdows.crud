@@ -6,6 +6,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using pengdows.crud.exceptions;
+using pengdows.crud.wrappers;
 
 #endregion
 
@@ -17,7 +18,7 @@ public class DatabaseContext : IDatabaseContext
     private readonly DbProviderFactory _factory;
     private readonly ILogger<IDatabaseContext> _logger;
     private bool _applyConnectionSessionSettings;
-    private DbConnection? _connection;
+    private ITrackedConnection? _connection = null;
 
     private long _connectionCount;
     private string _connectionSessionSettings;
@@ -25,7 +26,8 @@ public class DatabaseContext : IDatabaseContext
     private bool _isReadConnection = true;
     private bool _isSqlServer;
     private bool _isWriteConnection = true;
-    private int _numberOfOpenConnections;
+    private long _maxNumberOfOpenConnections;
+    private string _connectionString;
     public ReadWriteMode ReadWriteMode { get; }
 
     public DatabaseContext(string connectionString,
@@ -45,12 +47,25 @@ public class DatabaseContext : IDatabaseContext
 
     public string Name { get; set; }
 
-    private string ConnectionString { get; set; }
+    private string ConnectionString
+    {
+        get => _connectionString;
+        set
+        {
+            //don't let it change
+            if (!string.IsNullOrWhiteSpace(_connectionString) || string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException($"Connection string reset attempted.");
+            }
+
+            _connectionString = value;
+        }
+    }
 
 
-    private DbConnection Connection => _connection ??
-                                       throw new ObjectDisposedException(
-                                           "attempt to use single connection from the wrong mode.");
+    private ITrackedConnection Connection => _connection ??
+                                             throw new ObjectDisposedException(
+                                                 "attempt to use single connection from the wrong mode.");
 
 
     public DbMode ConnectionMode { get; private set; }
@@ -84,6 +99,67 @@ public class DatabaseContext : IDatabaseContext
         return sb.ToString();
     }
 
+    private ITrackedConnection FactoryCreateConnection(string? connectionString = null)
+    {
+        SanitizeConnectionString(connectionString);
+
+        var connection = _factory.CreateConnection();
+        connection.ConnectionString = ConnectionString;
+
+        var tracked = new TrackedConnection(
+            connection,
+            (from, to) => //StateChangeHandler
+            {
+                switch (to)
+                {
+                    case ConnectionState.Open:
+                    {
+                        _logger.LogDebug("Opening connection: " + Name);
+                        var now = Interlocked.Increment(ref _connectionCount);
+                        UpdateMaxConnectionCount(now);
+                        break;
+                    }
+                    case ConnectionState.Closed:
+                    case ConnectionState.Broken:
+                        _logger.LogDebug("Closed or broken connection: " + Name);
+                        Interlocked.Decrement(ref _connectionCount);
+                        break;
+                }
+            },
+            onFirstOpen: ApplyConnectionSessionSettings,
+            onDispose: conn => { _logger.LogDebug("Connection disposed."); });
+        return tracked;
+    }
+
+    private void SanitizeConnectionString(string? connectionString)
+    {
+        if (connectionString != null && string.IsNullOrWhiteSpace(ConnectionString))
+        {
+            //"Multiple Active Record Sets"
+            var csb = GetFactoryConnectionStringBuilder(connectionString); 
+            var tmp = csb.ConnectionString;
+            this.ConnectionString = tmp;
+        }
+    }
+
+
+    private void UpdateMaxConnectionCount(long current)
+    {
+        long previous;
+        do
+        {
+            previous = Interlocked.Read(ref _maxNumberOfOpenConnections);
+            if (current <= previous)
+                return; // no update needed
+
+            // try to update only if no one else has changed it
+        } while (Interlocked.CompareExchange(
+                     ref _maxNumberOfOpenConnections,
+                     current,
+                     previous) != previous);
+    }
+
+
     public TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
     {
         if (!_isWriteConnection && isolationLevel is null) isolationLevel = IsolationLevel.RepeatableRead;
@@ -109,19 +185,25 @@ public class DatabaseContext : IDatabaseContext
     {
         var p = _factory.CreateParameter() ?? throw new InvalidOperationException("Failed to create parameter.");
 
-        if (string.IsNullOrEmpty(name)) name = GenerateRandomName();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = GenerateRandomName();
+        }
 
         var valueIsNull = Utils.IsNullOrDbNull(value);
         p.ParameterName = name;
         p.DbType = type;
         p.Value = valueIsNull ? DBNull.Value : value;
-        if (!valueIsNull && p.DbType == DbType.String && value is string s) p.Size = Math.Max(s.Length, 1);
+        if (!valueIsNull && p.DbType == DbType.String && value is string s)
+        {
+            p.Size = Math.Max(s.Length, 1);
+        }
 
         return p;
     }
 
 
-    public DbConnection GetConnection(ExecutionType executionType = ExecutionType.Read)
+    public ITrackedConnection GetConnection(ExecutionType executionType)
     {
         switch (ConnectionMode)
         {
@@ -135,11 +217,6 @@ public class DatabaseContext : IDatabaseContext
             default:
                 throw new InvalidOperationException("Invalid connection mode.");
         }
-    }
-
-    public void Dispose()
-    {
-        Dispose(true);
     }
 
     public string GenerateRandomName(int length = 8)
@@ -199,7 +276,8 @@ public class DatabaseContext : IDatabaseContext
         if (!_isWriteConnection) throw new InvalidOperationException("The connection is not write connection.");
     }
 
-    public void CloseAndDisposeConnection(DbConnection connection)
+
+    public void CloseAndDisposeConnection(ITrackedConnection? connection)
     {
         if (connection == null) return;
 
@@ -208,6 +286,7 @@ public class DatabaseContext : IDatabaseContext
         {
             case DbMode.SingleConnection:
             case DbMode.SingleWriter:
+            case DbMode.KeepAlive:
                 if (_connection != connection)
                 {
                     //never close our single write connection
@@ -217,7 +296,6 @@ public class DatabaseContext : IDatabaseContext
 
                 break;
             case DbMode.Standard:
-            case DbMode.KeepAlive:
                 _logger.LogInformation("Closing a standard connection");
                 try
                 {
@@ -237,22 +315,34 @@ public class DatabaseContext : IDatabaseContext
 
     public string MakeParameterName(DbParameter dbParameter)
     {
-        return !_dataSourceInfo.SupportsNamedParameters
-            ? "?"
-            : $"{_dataSourceInfo.ParameterMarker}{dbParameter.ParameterName}";
+        return MakeParameterName(dbParameter.ParameterName);
     }
 
-    public ProcWrappingStyle ProcWrappingStyle => _dataSourceInfo.ProcWrappingStyle;
+    public string MakeParameterName(string parameterName)
+    {
+        return !_dataSourceInfo.SupportsNamedParameters
+            ? "?"
+            : $"{_dataSourceInfo.ParameterMarker}{parameterName}";
+    }
+
+
+    public ProcWrappingStyle ProcWrappingStyle
+    {
+        get => _dataSourceInfo.ProcWrappingStyle;
+        set => _dataSourceInfo.ProcWrappingStyle = value;
+    }
 
     public int MaxParameterLimit => _dataSourceInfo.MaxParameterLimit;
+
+    public long MaxNumberOfConnections => Interlocked.Read(ref _maxNumberOfOpenConnections);
 
     public long NumberOfOpenConnections => Interlocked.Read(ref _connectionCount);
 
     public string QuotePrefix => DataSourceInfo.QuotePrefix;
 
     public string QuoteSuffix => DataSourceInfo.QuoteSuffix;
-  
-    private void CheckForSqlServerSettings(DbConnection conn)
+
+    private void CheckForSqlServerSettings(ITrackedConnection conn)
     {
         _isSqlServer =
             _dataSourceInfo.DatabaseProductName.StartsWith("Microsoft SQL Server", StringComparison.OrdinalIgnoreCase)
@@ -314,16 +404,13 @@ public class DatabaseContext : IDatabaseContext
 
     private void InitializeInternals(string connectionString, DbMode mode, ReadWriteMode readWriteMode)
     {
-        DbConnection conn = null;
+        ITrackedConnection conn = null;
         try
         {
             _isReadConnection = (readWriteMode & ReadWriteMode.ReadOnly) == ReadWriteMode.ReadOnly;
             _isWriteConnection = (readWriteMode & ReadWriteMode.WriteOnly) == ReadWriteMode.WriteOnly;
-            var csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
-            conn = _factory.CreateConnection();
-            csb.ConnectionString = connectionString;
-            conn.ConnectionString = csb.ConnectionString;
-            AddStateChangeHandler(conn);
+            conn = FactoryCreateConnection(connectionString);
+
             try
             {
                 conn.Open();
@@ -335,30 +422,57 @@ public class DatabaseContext : IDatabaseContext
 
             _dataSourceInfo = new DataSourceInformation(conn);
             SetupConnectionSessionSettingsForProvider(conn);
-            ConnectionString = csb.ConnectionString;
             Name = _dataSourceInfo.DatabaseProductName;
-            if (_dataSourceInfo.Product == SupportedDatabase.Sqlite
-                && "Data Source=:memory:" == ConnectionString)
+            if (_dataSourceInfo.Product == SupportedDatabase.Sqlite)
             {
-                //sqlite memory mode
-                ConnectionMode = DbMode.SingleConnection;
+                // Determine correct mode based on connection string
+                // ":memory:" needs a persistent connection to avoid data loss
+                // file-based SQLite requires a single writer to avoid lock conflicts
+                var csb = GetFactoryConnectionStringBuilder(String.Empty);
+                //csb.ConnectionString = connectionString;
+                var ds = csb["Data Source"] as string;
+                ConnectionMode = ":memory:" == ds
+                    ? DbMode.SingleConnection
+                    : DbMode.SingleWriter;
                 mode = ConnectionMode;
             }
 
             if (mode != DbMode.Standard)
+            {
+                //
+                Interlocked.Increment(ref _connectionCount);
                 // if the mode is anything but standard
                 // we store it as our minimal connection
+                ApplyConnectionSessionSettings(conn);
                 _connection = conn;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
         }
         finally
         {
             if (mode == DbMode.Standard)
+            {
                 //if it is standard mode, we can close it.
                 conn?.Dispose();
+            }
         }
     }
 
-    private void SetupConnectionSessionSettingsForProvider(DbConnection conn)
+    private DbConnectionStringBuilder GetFactoryConnectionStringBuilder(string connectionString)
+    {
+        if (_csb == null)
+        {
+            _csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
+            _csb.ConnectionString = connectionString;
+        }
+
+        return _csb;
+    }
+
+    private void SetupConnectionSessionSettingsForProvider(ITrackedConnection conn)
     {
         switch (_dataSourceInfo.Product)
         {
@@ -414,51 +528,16 @@ public class DatabaseContext : IDatabaseContext
     }
 
 
-    private DbConnection GetStandardConnection()
+    private ITrackedConnection GetStandardConnection()
     {
-        var conn = _factory.CreateConnection();
-        conn.ConnectionString = ConnectionString;
-        AddStateChangeHandler(conn);
+        var conn = FactoryCreateConnection();
         return conn;
     }
 
-    private void AddStateChangeHandler(DbConnection connection)
+
+    private void ApplyConnectionSessionSettings(IDbConnection connection)
     {
-        connection.StateChange += (sender, args) =>
-        {
-            switch (args.CurrentState)
-            {
-                case ConnectionState.Broken:
-                    Interlocked.Decrement(ref _connectionCount);
-                    break;
-                case ConnectionState.Open:
-                    Interlocked.Increment(ref _connectionCount);
-                    ApplyConnectionSessionSettings(connection);
-
-                    break;
-                case ConnectionState.Closed:
-                    Interlocked.Decrement(ref _connectionCount);
-                    break;
-                case ConnectionState.Executing:
-                case ConnectionState.Fetching:
-                    // we aren't interested
-                    break;
-                case ConnectionState.Connecting:
-                    //maybe we care
-                    break;
-                default:
-                    // can't get here
-                    break;
-            }
-
-            var info = string.Format("{1} now has open connections:{0}", Interlocked.Read(ref _connectionCount),
-                DataSourceInfo?.Product.ToString() ?? string.Empty);
-            _logger.LogInformation(info);
-        };
-    }
-
-    private void ApplyConnectionSessionSettings(DbConnection connection)
-    {
+        _logger.LogInformation("Applying connection session settings");
         if (_applyConnectionSessionSettings)
             try
             {
@@ -473,21 +552,45 @@ public class DatabaseContext : IDatabaseContext
             }
     }
 
-    private DbConnection GetSingleConnection()
+    private ITrackedConnection GetSingleConnection()
     {
         return Connection;
     }
 
-    private DbConnection GetSingleWriterConnection(ExecutionType type)
+    private ITrackedConnection GetSingleWriterConnection(ExecutionType type)
     {
-        if (ExecutionType.Read == type) return GetStandardConnection();
+        if (ExecutionType.Read == type)
+        {
+            return GetStandardConnection();
+        }
 
         return Connection;
     }
 
-    private void Dispose(bool disposing)
+    private int _disposed;
+    private DbConnectionStringBuilder _csb;
+
+    public void Dispose()
     {
-        if (disposing) _connection?.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            _connection?.Close();
+            _connection?.Dispose();
+            _connection = null;
+        }
+
+        // unmanaged cleanup if needed
     }
 
     ~DatabaseContext()

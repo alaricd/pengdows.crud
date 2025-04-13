@@ -8,7 +8,7 @@ public class TypeCoercionHelperTests
     public void Coerce_StringToInt_ReturnsInt()
     {
         var typeRegistry = new TypeMapRegistry();
-        var ti = typeRegistry.GetTableInfo<TestEntity>();
+        var ti = typeRegistry.GetTableInfo<SampleEntity>();
         ti.Columns.TryGetValue("MaxValue", out var maxValue);
         var result = TypeCoercionHelper.Coerce("123", typeof(string), maxValue);
         Assert.Equal(123, result);

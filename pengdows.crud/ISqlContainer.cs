@@ -3,23 +3,30 @@
 using System.Data;
 using System.Data.Common;
 using System.Text;
+using pengdows.crud.wrappers;
 
 #endregion
 
 namespace pengdows.crud;
 
+/// <summary>
+/// Represents a composable, parameterized SQL container that supports dynamic query building,
+/// safe parameter binding, and execution in the context of a tracked database connection.
+/// </summary>
 public interface ISqlContainer : IDisposable
 {
     StringBuilder Query { get; }
     int ParameterCount { get; }
-
-    DbParameter AppendParameter<T>(DbType type, T value);
-    DbParameter AppendParameter<T>(string? name, DbType type, T value);
-    void AppendParameters(List<DbParameter> list);
-    void AppendParameters(DbParameter parameter);
+    void AddParameter(DbParameter parameter);
+    DbParameter AddParameterWithValue<T>(DbType type, T value);
+    DbParameter AddParameterWithValue<T>(string? name, DbType type, T value);
     Task<int> ExecuteNonQueryAsync(CommandType commandType = CommandType.Text);
     Task<T?> ExecuteScalarAsync<T>(CommandType commandType = CommandType.Text);
     Task<DbDataReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text);
-    DbCommand CreateCommand(DbConnection conn);
+    void AddParameters(IEnumerable<DbParameter> list);
+    void Dispose();
+    DbCommand CreateCommand(ITrackedConnection conn);
     void Clear();
+    string WrapForStoredProc(ExecutionType executionType, bool includeParameters = true);
+    string WrapObjectName(string objectName);
 }

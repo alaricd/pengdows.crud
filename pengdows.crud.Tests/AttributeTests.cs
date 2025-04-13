@@ -10,7 +10,7 @@ public class AttributeTests
     [Fact]
     public void ColumnAttribute_SetsName()
     {
-        var attr = new ColumnAttribute("Name",DbType.Int32);
+        var attr = new ColumnAttribute("Name", DbType.Int32);
         Assert.Equal("Name", attr.Name);
     }
 

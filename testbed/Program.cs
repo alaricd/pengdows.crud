@@ -13,18 +13,24 @@ builder.Services.AddScoped<IAuditContextProvider<string>, StringAuditContextProv
 builder.Services.AddSingleton<ITypeMapRegistry, TypeMapRegistry>();
 
 var host = builder.Build();
-
-var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory.Instance,
-    host.Services.GetRequiredService<ITypeMapRegistry>());
-var lite = new TestProvider(liteDb, host.Services);
-await lite.RunTest();
-
-var my = new MySqlTestContainer();
-await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
-var maria = new MariaDbContainer();
-await maria.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
-var pg = new PostgreSqlTestContainer();
-await pg.RunTestWithContainerAsync<PostgreSQLTest>(host.Services, (db, sp) => new PostgreSQLTest(db, sp));
+//
+// using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory.Instance,
+//            host.Services.GetRequiredService<ITypeMapRegistry>()))
+// {
+//     var lite = new TestProvider(liteDb, host.Services);
+//     await lite.RunTest();
+//     
+// }
+//
+// await using (var my = new MySqlTestContainer())
+// {
+//     await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
+// }
+//
+// var maria = new MariaDbContainer();
+// await maria.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
+// var pg = new PostgreSqlTestContainer();
+// await pg.RunTestWithContainerAsync<PostgreSQLTest>(host.Services, (db, sp) => new PostgreSQLTest(db, sp));
 var ms = new SqlServerTestContainer();
 await ms.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
 // var o = new OracleTestContainer();
@@ -35,8 +41,8 @@ await ms.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new 
 // await oracle.RunTest();
 
 
-// var fb = new FirebirdSqlTestContainer();
-// await fb.RunTestWithContainerAsync(host.Services, (db, sp) => new FirebirdTestProvider(db, sp));
+var fb = new FirebirdSqlTestContainer();
+await fb.RunTestWithContainerAsync(host.Services, (db, sp) => new FirebirdTestProvider(db, sp));
 
 // var db2 = new Db2TestContainer();
 // await db2.RunTestWithContainerAsync(host.Services, (db, sp) => new Db2TestProvider(db, sp));

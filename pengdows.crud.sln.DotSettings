@@ -335,4 +335,5 @@
 	<s:Boolean x:Key="/Default/CodeEditing/ContextActionTable/DisabledContextActions/=JetBrains_002ERider_002EBackend_002EFeatures_002EDebugger_002EActions_002ECSharp_002ECSharpJumpToStatementContextAction/@EntryIndexedValue">False</s:Boolean>
 	<s:Boolean x:Key="/Default/CodeEditing/ContextActionTable/DisabledContextActions/=JetBrains_002ERider_002EBackend_002EFeatures_002EDebugger_002EActions_002ECSharp_002ECSharpRunToCursorContextAction/@EntryIndexedValue">False</s:Boolean>
 	<s:Boolean x:Key="/Default/CodeEditing/ContextActionTable/DisabledContextActions/=JetBrains_002ERider_002EBackend_002EFeatures_002EDebugger_002EActions_002ECSharp_002ECSharpSmartStepIntoContextAction/@EntryIndexedValue">False</s:Boolean>
-	<s:Boolean x:Key="/Default/UserDictionary/Words/=pengdows/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=pengdows/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=postgre/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>

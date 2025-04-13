@@ -1,7 +1,8 @@
 #region
 
-using System.Data.Common;
+using System.Data;
 using System.Text.RegularExpressions;
+using pengdows.crud.wrappers;
 
 #endregion
 
@@ -9,6 +10,7 @@ namespace pengdows.crud;
 
 public interface IDataSourceInformation
 {
+    string ParameterMarkerPattern { get; }
     string QuotePrefix { get; }
     string QuoteSuffix { get; }
     bool SupportsNamedParameters { get; }
@@ -24,5 +26,13 @@ public interface IDataSourceInformation
     SupportedDatabase Product { get; }
     bool SupportsMerge { get; }
     bool SupportsInsertOnConflict { get; }
-    string GetDatabaseVersion(DbConnection dbConnection);
+
+    /// <summary>
+    /// Indicates whether stored procedure parameter names must match the declared names in the database.
+    /// This is true for Oracle, PostgreSQL, and CockroachDB when using named binding.
+    /// </summary>
+    bool RequiresStoredProcParameterNameMatch { get; }
+
+    string GetDatabaseVersion(ITrackedConnection connection);
+    DataTable GetSchema(ITrackedConnection connection);
 }

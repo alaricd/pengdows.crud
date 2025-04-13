@@ -25,7 +25,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     private readonly bool _usePositionalParameters;
 
     private readonly ColumnInfo? _versionColumn;
-    private Type _userFieldType = null;
+    private readonly Type? _userFieldType = null;
 
     public EntityHelper(IDatabaseContext databaseContext,
         IServiceProvider serviceProvider,
@@ -44,7 +44,10 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                 c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
                 c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
             )?.PropertyInfo.PropertyType;
-        if (propertyInfoPropertyType != null && _serviceProvider != null) _userFieldType = propertyInfoPropertyType;
+        if (propertyInfoPropertyType != null && _serviceProvider != null)
+        {
+            _userFieldType = propertyInfoPropertyType;
+        }
 
         _parameterMarker = _context.DataSourceInfo.ParameterMarker;
         _usePositionalParameters = _context.DataSourceInfo.ParameterMarker == "?";
@@ -137,7 +140,10 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         while (await reader.ReadAsync().ConfigureAwait(false))
         {
             var obj = MapReaderToObject(reader);
-            if (obj != null) list.Add(obj);
+            if (obj != null)
+            {
+                list.Add(obj);
+            }
         }
 
         return list;
@@ -192,7 +198,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             .Append(values)
             .Append(")");
 
-        sc.AppendParameters(parameters);
+        sc.AddParameters(parameters);
         return sc;
     }
 
@@ -325,7 +331,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         if (sb.Length < 1) return;
 
 
-        sc.AppendParameters(pp);
+        sc.AddParameters(pp);
         if (!sc.Query.ToString().Contains("WHERE ")) sc.Query.Append("\n WHERE ");
 
         sc.Query.Append(" (");
@@ -424,7 +430,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             }
         }
 
-        sc.AppendParameters(parameters);
+        sc.AddParameters(parameters);
         return sc;
     }
 
@@ -438,7 +444,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             throw new InvalidOperationException($"row identity column for table {WrappedTableName} not found");
 
         var p = _context.CreateDbParameter("id", idCol.DbType, id);
-        sc.AppendParameters(p);
+        sc.AddParameter(p);
 
         sc.Query.Append("DELETE FROM ")
             .Append(WrappedTableName)
@@ -473,7 +479,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             {
                 if (sb.Length > 0) sb.Append(", ");
 
-                var p = sqlContainer.AppendParameter($"p{idx++}", dbType, id);
+                var p = sqlContainer.AddParameterWithValue($"p{idx++}", dbType, id);
                 var name = MakeParameterName(p);
                 sb.Append(name);
             }
@@ -531,4 +537,132 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     {
         return _context.WrapObjectName(objectName);
     }
+    //
+    // public ISqlContainer BuildUpsert(T objectToUpsert, IDatabaseContext? context = null)
+    // {
+    //     var ctx = context ?? _context;
+    //     return _context.DataSourceInfo.Product
+    //         switch
+    //         {
+    //             SupportedDatabase.PostgreSql or SupportedDatabase.Sqlite or SupportedDatabase.CockroachDb =>
+    //                 BuildInsertOnConflictUpsert(objectToUpsert, ctx),
+    //
+    //             SupportedDatabase.MySql or SupportedDatabase.MariaDb =>
+    //                 BuildInsertOnDuplicateKeyUpsert(objectToUpsert, ctx),
+    //
+    //             SupportedDatabase.SqlServer or SupportedDatabase.Oracle or SupportedDatabase.Firebird =>
+    //                 BuildMergeUpsert(objectToUpsert, ctx),
+    //
+    //             _ => throw new NotSupportedException("UPSERT is not supported for this database.")
+    //         };
+    // }
+    //
+    // private ISqlContainer BuildInsertOnConflictUpsert(T obj, IDatabaseContext ctx)
+    // {
+    //     var sc = BuildInsertStatement(obj, ctx, out var updateClause, out var conflictColumn);
+    //
+    //     sc.Query.Append(" ON CONFLICT(")
+    //         .Append(WrapObjectName(conflictColumn.Name))
+    //         .Append(") DO UPDATE SET ")
+    //         .Append(updateClause);
+    //
+    //     return sc;
+    // }
+    //
+    // private ISqlContainer BuildInsertOnDuplicateKeyUpsert(T obj, IDatabaseContext ctx)
+    // {
+    //     var sc = BuildInsertStatement(obj, ctx, out var updateClause, out _);
+    //
+    //     sc.Query.Append(" ON DUPLICATE KEY UPDATE ")
+    //         .Append(updateClause);
+    //
+    //     return sc;
+    // }
+    //
+    // private ISqlContainer BuildMergeUpsert(T objectToUpsert, IDatabaseContext ctx)
+    // {
+    //     if (objectToUpsert == null)
+    //         throw new ArgumentNullException(nameof(objectToUpsert));
+    //     if (_idColumn == null)
+    //         throw new InvalidOperationException($"No ID column defined for type {typeof(T).Name}");
+    //
+    //     var sc = ctx.CreateSqlContainer();
+    //     var parameters = new List<DbParameter>();
+    //     var sourceAlias = WrapObjectName("source");
+    //     var targetAlias = WrapObjectName("target");
+    //
+    //     var insertColumns = new List<string>();
+    //     var sourceSelect = new List<string>();
+    //     var insertValues = new List<string>();
+    //     var updateAssignments = new List<string>();
+    //
+    //     int paramIndex = 0;
+    //
+    //     SetAuditFields(objectToUpsert, updateOnly: false);
+    //
+    //     foreach (var column in _tableInfo.Columns.Values)
+    //     {
+    //         if (column.IsId && !column.IsIdIsWritable) continue;
+    //
+    //         var value = column.MakeParameterValueFromField(objectToUpsert);
+    //         var param = ctx.CreateDbParameter($"p{paramIndex++}", column.DbType, value);
+    //         parameters.Add(param);
+    //
+    //         var wrappedCol = WrapObjectName(column.Name);
+    //         var paramRef = MakeParameterName(param);
+    //
+    //         insertColumns.Add(wrappedCol);
+    //         insertValues.Add($"{sourceAlias}.{wrappedCol}");
+    //         sourceSelect.Add($"{paramRef} AS {wrappedCol}");
+    //
+    //         if (!column.IsId && !column.IsVersion && !column.IsNonUpdateable)
+    //         {
+    //             updateAssignments.Add($"{targetAlias}.{wrappedCol} = {sourceAlias}.{wrappedCol}");
+    //         }
+    //     }
+    //
+    //     if (_versionColumn != null)
+    //     {
+    //         var versionCol = WrapObjectName(_versionColumn.Name);
+    //         updateAssignments.Add($"{targetAlias}.{versionCol} = {targetAlias}.{versionCol} + 1");
+    //     }
+    //
+    //     var idColName = WrapObjectName(_idColumn.Name);
+    //     var fromClause = _context.DataSourceInfo.Product switch
+    //     {
+    //         SupportedDatabase.Oracle => "FROM DUAL",
+    //         SupportedDatabase.Firebird => "FROM RDB$DATABASE",
+    //         SupportedDatabase.SqlServer => "FROM (SELECT 1 AS Dummy) AS dummy",
+    //         _ => throw new NotSupportedException("MERGE UPSERT not supported for this database.")
+    //     };
+    //
+    //     sc.Query.AppendLine("MERGE INTO ")
+    //         .Append(WrappedTableName).Append(" ").Append(targetAlias).AppendLine()
+    //         .Append("USING (SELECT ").Append(string.Join(", ", sourceSelect)).Append(" ")
+    //         .Append(fromClause).Append(") ").Append(sourceAlias).AppendLine()
+    //         .Append("ON (")
+    //         .Append($"{targetAlias}.{idColName} = {sourceAlias}.{idColName})").AppendLine()
+    //         .AppendLine("WHEN MATCHED THEN")
+    //         .Append("  UPDATE SET ").Append(string.Join(", ", updateAssignments)).AppendLine()
+    //         .AppendLine("WHEN NOT MATCHED THEN")
+    //         .Append("  INSERT (").Append(string.Join(", ", insertColumns)).Append(")").AppendLine()
+    //         .Append("  VALUES (").Append(string.Join(", ", insertValues)).Append(");");
+    //
+    //     sc.AddParameters(parameters);
+    //     return sc;
+    // }
+    //
+    // private string GetUpsertExcludedValue(ColumnInfo col)
+    // {
+    //     return _context.DataSourceInfo.Product switch
+    //     {
+    //         SupportedDatabase.PostgreSql or SupportedDatabase.Sqlite or SupportedDatabase.CockroachDb =>
+    //             $"excluded.{WrapObjectName(col.Name)}",
+    //
+    //         SupportedDatabase.MySql or SupportedDatabase.MariaDb =>
+    //             $"VALUES({WrapObjectName(col.Name)})",
+    //
+    //         _ => throw new NotSupportedException("Excluded values not supported for this database.")
+    //     };
+    // }
 }

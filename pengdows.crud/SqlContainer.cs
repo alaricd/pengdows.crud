@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using pengdows.crud.wrappers;
 
 #endregion
 
@@ -36,12 +37,33 @@ public class SqlContainer : ISqlContainer
 
     public int ParameterCount => _parameters.Count;
 
-    public DbParameter AppendParameter<T>(DbType type, T value)
+
+    public void AddParameter(DbParameter parameter)
     {
-        return AppendParameter(null, type, value);
+        if (parameter == null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(parameter.ParameterName))
+        {
+            parameter.ParameterName = _context.GenerateRandomName();
+        }
+
+        _parameters.Add(parameter);
     }
 
-    public DbParameter AppendParameter<T>(string? name, DbType type, T value)
+    public DbParameter AddParameterWithValue<T>(DbType type, T value)
+    {
+        if (value is DbParameter)
+        {
+            throw new ArgumentException("Parameter type can't be DbParameter.");
+        }
+
+        return AddParameterWithValue(null, type, value);
+    }
+
+    public DbParameter AddParameterWithValue<T>(string? name, DbType type, T value)
     {
         name ??= _context.GenerateRandomName();
         var parameter = _context.CreateDbParameter(name, type, value);
@@ -52,7 +74,7 @@ public class SqlContainer : ISqlContainer
     public async Task<int> ExecuteNonQueryAsync(CommandType commandType = CommandType.Text)
     {
         _context.AssertIsWriteConnection();
-        DbConnection conn = null;
+        ITrackedConnection conn = null;
         DbCommand cmd = null;
         try
         {
@@ -85,7 +107,7 @@ public class SqlContainer : ISqlContainer
     {
         _context.AssertIsReadConnection();
 
-        DbConnection conn = null;
+        ITrackedConnection conn = null;
         DbCommand cmd = null;
         try
         {
@@ -116,14 +138,12 @@ public class SqlContainer : ISqlContainer
         }
     }
 
-    public void AppendParameters(List<DbParameter> list)
+    public void AddParameters(IEnumerable<DbParameter> list)
     {
-        if (list is { Count: > 0 }) _parameters.AddRange(list);
-    }
-
-    public void AppendParameters(DbParameter parameter)
-    {
-        if (parameter != null) _parameters.Add(parameter);
+        if (list != null && list.Any())
+        {
+            _parameters.AddRange(list);
+        }
     }
 
     public void Dispose()
@@ -132,15 +152,17 @@ public class SqlContainer : ISqlContainer
         GC.SuppressFinalize(this);
     }
 
-    public DbCommand CreateCommand(DbConnection conn)
+    public DbCommand CreateCommand(ITrackedConnection conn)
     {
         var cmd = conn.CreateCommand();
         if (_context is TransactionContext transactionContext)
         {
-            cmd.Transaction = transactionContext.Transaction;
+            cmd.Transaction = (transactionContext.Transaction as DbTransaction)
+                              ?? throw new InvalidOperationException("Transaction is not a transaction");
         }
 
-        return cmd;
+        return (cmd as DbCommand)
+               ?? throw new InvalidOperationException("Command is not a DbCommand");
     }
 
     public void Clear()
@@ -149,35 +171,59 @@ public class SqlContainer : ISqlContainer
         _parameters.Clear();
     }
 
-    public string WrapForStoredProc(ExecutionType executionType)
+    public string WrapForStoredProc(ExecutionType executionType, bool includeParameters = true)
     {
-        var procText = Query.ToString();
+        var procName = Query.ToString().Trim();
+
+        if (string.IsNullOrWhiteSpace(procName))
+            throw new InvalidOperationException("Procedure name is missing from the query.");
+
+        var args = includeParameters ? BuildProcedureArguments() : string.Empty;
 
         return _context.ProcWrappingStyle switch
         {
             ProcWrappingStyle.PostgreSQL when executionType == ExecutionType.Read
-                => $"SELECT * FROM {procText}",
+                => $"SELECT * FROM {procName}({args})",
 
             ProcWrappingStyle.PostgreSQL
-                => $"CALL {procText}",
+                => $"CALL {procName}({args})",
 
             ProcWrappingStyle.Oracle
-                => $"BEGIN\n{procText};\nEND;",
+                => $"BEGIN\n\t{procName}{(string.IsNullOrEmpty(args) ? string.Empty : $"({args})")};\nEND;",
 
             ProcWrappingStyle.Exec
-                => $"EXEC {procText}",
+                => string.IsNullOrWhiteSpace(args)
+                    ? $"EXEC {procName}"
+                    : $"EXEC {procName} {args}",
 
             ProcWrappingStyle.Call
-                => $"CALL {procText}",
+                => $"CALL {procName}({args})",
 
             ProcWrappingStyle.ExecuteProcedure
-                => $"EXECUTE PROCEDURE {procText}",
+                => $"EXECUTE PROCEDURE {procName}({args})",
 
             _ => throw new NotSupportedException("Stored procedures are not supported by this database.")
         };
+
+        string BuildProcedureArguments()
+        {
+            if (_parameters.Count == 0)
+                return string.Empty;
+
+            // Named parameter support check
+            if (_context.DataSourceInfo.SupportsNamedParameters)
+            {
+                // Trust that dev has set correct names
+                return string.Join(", ", _parameters.Select(p => _context.MakeParameterName(p)));
+            }
+
+            // Positional binding (e.g., SQLite, MySQL)
+            return string.Join(", ", Enumerable.Repeat("?", _parameters.Count));
+        }
     }
 
-    private DbCommand PrepareCommand(DbConnection conn, CommandType commandType, ExecutionType executionType)
+
+    private DbCommand PrepareCommand(ITrackedConnection conn, CommandType commandType, ExecutionType executionType)
     {
         if (commandType == CommandType.TableDirect) throw new NotSupportedException("TableDirect isn't supported.");
 
@@ -193,55 +239,50 @@ public class SqlContainer : ISqlContainer
                 $"Query exceeds the maximum parameter limit of {_context.DataSourceInfo.MaxParameterLimit} for {_context.DataSourceInfo.DatabaseProductName}.");
 
         if (_parameters.Count > 0)
+        {
             cmd.Parameters.AddRange(_parameters.ToArray());
-        if (_context.DataSourceInfo.PrepareStatements) cmd.Prepare();
+        }
+
+        if (_context.DataSourceInfo.PrepareStatements)
+        {
+            cmd.Prepare();
+        }
 
         return cmd;
     }
 
-    private void OpenConnection(DbConnection conn)
+    private void OpenConnection(ITrackedConnection conn)
     {
         if (conn.State != ConnectionState.Open) conn.Open();
     }
 
-    private void Cleanup(DbCommand cmd, DbConnection conn, ExecutionType executionType)
+    private void Cleanup(DbCommand? cmd, ITrackedConnection? conn, ExecutionType executionType)
     {
         if (cmd != null)
         {
-            cmd.Parameters?.Clear();
             try
             {
+                cmd.Parameters?.Clear();
                 cmd.Connection = null;
                 cmd.Dispose();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                cmd.Disposed += (_, __) =>
-                {
-                    _logger.LogInformation("Disposed Command that couldn't be cleaned up earlier: " +
-                                           _context.DataSourceInfo.DatabaseProductName);
-                };
-                if (conn != null)
-                    conn.Disposed += (_, __) =>
-                    {
-                        try
-                        {
-                            cmd?.Dispose();
-                        }
-                        catch
-                        {
-                            //eat error quitely
-                        }
-                    };
+                _logger.LogWarning($"Command disposal failed: {ex.Message}");
+                // We're intentionally not retrying here anymore — disposal failure is generally harmless in this case
             }
         }
 
+        // Don't dispose read connections — they are left open until the reader disposes
         if (executionType == ExecutionType.Read)
-            //leave the connection open for reads until we dispose them.
             return;
-        if (!(_context is TransactionContext)) //  && executionType == ExecutionType.Write) 
+
+        if (_context is not TransactionContext && conn is not null)
+        {
             _context.CloseAndDisposeConnection(conn);
+        }
     }
+
 
     public string WrapObjectName(string objectName)
     {

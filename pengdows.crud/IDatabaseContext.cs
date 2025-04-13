@@ -2,7 +2,7 @@
 
 using System.Data;
 using System.Data.Common;
-using System.Security.Cryptography;
+using pengdows.crud.wrappers;
 
 #endregion
 
@@ -14,7 +14,7 @@ public interface IDatabaseContext : IDisposable
     ITypeMapRegistry TypeMapRegistry { get; }
     IDataSourceInformation DataSourceInfo { get; }
     string SessionSettingsPreamble { get; }
-    ProcWrappingStyle ProcWrappingStyle { get; }
+    ProcWrappingStyle ProcWrappingStyle { get; set; }
     int MaxParameterLimit { get; }
     long NumberOfOpenConnections { get; }
 
@@ -24,10 +24,11 @@ public interface IDatabaseContext : IDisposable
     string CompositeIdentifierSeparator { get; }
 
     SupportedDatabase Product { get; }
+    long MaxNumberOfConnections { get; }
 
     ISqlContainer CreateSqlContainer(string? query = null);
     DbParameter CreateDbParameter<T>(string name, DbType type, T value);
-    DbConnection GetConnection(ExecutionType executionType);
+    ITrackedConnection GetConnection(ExecutionType executionType);
     string WrapObjectName(string name);
     TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null);
     string GenerateRandomName(int length = 8);
@@ -35,6 +36,9 @@ public interface IDatabaseContext : IDisposable
 
     void AssertIsReadConnection();
     void AssertIsWriteConnection();
-    void CloseAndDisposeConnection(DbConnection connection);
-    string MakeParameterName(DbParameter dbParameter);
+    
+   // void CloseAndDisposeConnection(DbConnection connection);
+   string MakeParameterName(DbParameter dbParameter);
+   string MakeParameterName(string parameterName);
+    void CloseAndDisposeConnection(ITrackedConnection? conn);
 }

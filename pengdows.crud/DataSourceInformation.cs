@@ -3,6 +3,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Text.RegularExpressions;
+using pengdows.crud.wrappers;
 
 #endregion
 
@@ -12,7 +13,12 @@ public class DataSourceInformation : IDataSourceInformation
 {
     private readonly bool? _supportsNamedParameters;
 
-    public DataSourceInformation(DbConnection connection)
+    public DataSourceInformation(IDbConnection connection)
+       : this(new TrackedConnection(connection as DbConnection))
+    {
+    }
+
+    public DataSourceInformation(ITrackedConnection connection)
     {
         try
         {
@@ -77,7 +83,7 @@ public class DataSourceInformation : IDataSourceInformation
     public string DatabaseProductVersion { get; }
     public string CompositeIdentifierSeparator { get; }
     public bool PrepareStatements { get; }
-    public ProcWrappingStyle ProcWrappingStyle { get; private set; }
+    public ProcWrappingStyle ProcWrappingStyle { get; internal set; }
     public int MaxParameterLimit { get; }
     public SupportedDatabase Product { get; private set; } = SupportedDatabase.Unknown;
 
@@ -100,7 +106,7 @@ public class DataSourceInformation : IDataSourceInformation
         _ => false
     };
 
-    public string GetDatabaseVersion(DbConnection connection)
+    public string GetDatabaseVersion(ITrackedConnection connection)
     {
         try
         {
@@ -147,7 +153,7 @@ public class DataSourceInformation : IDataSourceInformation
         };
     }
 
-    public DataTable GetSchema(DbConnection connection)
+    public DataTable GetSchema(ITrackedConnection connection)
     {
         try
         {
@@ -210,7 +216,7 @@ public class DataSourceInformation : IDataSourceInformation
         return dt;
     }
 
-    private bool isSqlite(DbConnection connection)
+    private bool isSqlite(ITrackedConnection connection)
     {
         try
         {
@@ -302,7 +308,7 @@ public class DataSourceInformation : IDataSourceInformation
         }
     }
 
-    private bool TestPrepareCommand(DbConnection conn)
+    private bool TestPrepareCommand(ITrackedConnection conn)
     {
         try
         {
@@ -332,4 +338,17 @@ public class DataSourceInformation : IDataSourceInformation
         //if (name.Contains("db2")) return SupportedDatabase.Db2;
         return SupportedDatabase.Unknown;
     }
+
+    /// <summary>
+    /// Indicates whether stored procedure parameter names must match the declared names in the database.
+    /// This is true for Oracle, PostgreSQL, and CockroachDB when using named binding.
+    /// </summary>
+    public bool RequiresStoredProcParameterNameMatch => Product switch
+    {
+        SupportedDatabase.Oracle => true,
+        SupportedDatabase.PostgreSql => true,
+        SupportedDatabase.CockroachDb => true,
+        _ => false // Others allow positional binding with arbitrary names
+    };
+
 }

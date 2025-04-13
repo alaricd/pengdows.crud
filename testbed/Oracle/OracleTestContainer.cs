@@ -1,6 +1,4 @@
-using System.ComponentModel;
 using DotNet.Testcontainers.Builders;
-using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
@@ -19,7 +17,6 @@ public class OracleTestContainer : TestContainer
 
     public OracleTestContainer()
     {
-        
         _container = new ContainerBuilder()
             .WithImage("oracle/database:18.4.0-xe")
             .WithEnvironment("ACCEPT_LICENSE_AGREEMENT", "Y")

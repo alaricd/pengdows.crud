@@ -3,12 +3,13 @@ using DotNet.Testcontainers.Containers;
 using FirebirdSql.Data.FirebirdClient;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
-using ZstdSharp.Unsafe;
 
 namespace testbed;
 
 public abstract class TestContainer : ITestContainer
 {
+    private int _disposed;
+
     public async Task RunTestWithContainerAsync<TTestProvider>(
         IServiceProvider services,
         Func<IDatabaseContext, IServiceProvider, TTestProvider> testProviderFactory)
@@ -20,10 +21,10 @@ public abstract class TestContainer : ITestContainer
 
         Console.WriteLine($"Running test with container: {GetType().Name}");
         await testProvider.RunTest();
+        Console.WriteLine($"Test finished: MaxConnections={dbContext.MaxNumberOfConnections} CurrentOpenConnection={dbContext.NumberOfOpenConnections}");
     }
 
     public abstract Task StartAsync();
-
     public abstract Task<IDatabaseContext> GetDatabaseContextAsync(IServiceProvider services);
 
     protected async Task WaitForDbToStart(DbProviderFactory instance, string connectionString, IContainer container,
@@ -93,4 +94,22 @@ public abstract class TestContainer : ITestContainer
 
         throw new Exception("Could not connect to database.");
     }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        await DisposeAsyncCore();
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual ValueTask DisposeAsyncCore()
+    {
+        // Override this in derived test container classes if they hold disposable resources
+        return ValueTask.CompletedTask;
+    }
+
 }

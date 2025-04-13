@@ -1435,4 +1435,4 @@
       <option name="ADD_NONJAVA_TO_ENTRIES" value="true" />
     </inspection_tool>
   </profile>
-</component>
+<inspection_tool class="RedundantBraces" enabled="true" level="WARNING" /><inspection_tool class="ConvertIfStatementToSwitch" enabled="true" level="SUGGESTION" /><inspection_tool class="TooManyStatements" enabled="true" level="WARNING" /><inspection_tool class="TooManyParameters" enabled="true" level="WARNING" /><inspection_tool class="FunctionComplexity" enabled="true" level="WARNING" /><inspection_tool class="FunctionWithMultipleExitPoints" enabled="true" level="SUGGESTION" /><inspection_tool class="ExcessiveIndentation" enabled="true" level="WARNING" /><inspection_tool class="UnwrapElse" enabled="true" level="SUGGESTION" /><inspection_tool class="ConvertToForLoop" enabled="true" level="SUGGESTION" /><inspection_tool class="AsyncVoidMethod" enabled="true" level="WARNING" /><inspection_tool class="UseVarKeyword" enabled="true" level="SUGGESTION" /><inspection_tool class="NameNotFollowingNamingConvention" enabled="true" level="WARNING" /></component>

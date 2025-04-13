@@ -10,4 +10,6 @@ public class IdentityTestEntity
     public int Id { get; set; }
 
     [Column("Name", DbType.String)] public string Name { get; set; } = string.Empty;
+
+    [Version] public int Version { get; set; }
 }

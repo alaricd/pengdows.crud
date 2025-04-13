@@ -1,35 +1,35 @@
 using System;
 using System.Data;
+using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace pengdows.crud.Tests;
 
-public class SqlContainerTests : IDisposable
+public class SqlContainerTests : SqlLiteContextTestBase
 {
-    private readonly IDatabaseContext _context;
+    private readonly EntityHelper<TestEntity, int> entityHelper;
 
     public SqlContainerTests()
     {
         // Create an in-memory SQLite connection
         // _connection = new SqliteConnection("Data Source=:memory:");
         // _connection.Open();
-        _context = new DatabaseContext(
-            "DataSource=:memory:",
-            SqliteFactory.Instance,
-            new TypeMapRegistry(),
-            DbMode.SingleConnection);
+        base.TypeMap.Register<TestEntity>();
+        this.entityHelper = new EntityHelper<TestEntity, int>(Context, null);
+        Assert.Equal(DbMode.SingleConnection, Context.ConnectionMode);
+        BuildTestTable();
     }
 
     public void Dispose()
     {
+        Context.Dispose();
     }
 
     [Fact]
     public void Constructor_WithContext_InitializesQueryEmpty()
     {
-        var container = _context.CreateSqlContainer();
+        var container = Context.CreateSqlContainer();
         Assert.NotNull(container.Query);
         Assert.Equal("", container.Query.ToString());
     }
@@ -37,46 +37,34 @@ public class SqlContainerTests : IDisposable
     [Fact]
     public void Constructor_WithQuery_InitializesQueryWithValue()
     {
-        var qp = _context.QuotePrefix;
-        var qs = _context.QuoteSuffix;
+        var qp = Context.QuotePrefix;
+        var qs = Context.QuoteSuffix;
 
         var query = $"SELECT * FROM {qp}Test{qs}";
-        var container = _context.CreateSqlContainer(query);
+        var container = Context.CreateSqlContainer(query);
         Assert.Equal(query, container.Query.ToString());
     }
 
     [Fact]
     public void AppendParameter_GeneratesRandomName_WhenNameIsNull()
     {
-        var container = _context.CreateSqlContainer();
-        var param = container.AppendParameter(null, DbType.String, "test");
+        var container = Context.CreateSqlContainer();
+        var param = container.AddParameterWithValue(DbType.String, "test");
         Assert.Equal("test", param.Value);
         Assert.Equal(DbType.String, param.DbType);
     }
 
     [Fact]
-    public async Task ExecuteNonQueryAsync_CreatesTable()
-    {
-        var qp = _context.QuotePrefix;
-        var qs = _context.QuoteSuffix;
-        var container = _context.CreateSqlContainer();
-        container.Query.AppendFormat("CREATE TABLE {0}Test{1} ({0}Id{1} INTEGER PRIMARY KEY, {0}Name{1} TEXT)", qp, qs);
-
-        var result = await container.ExecuteNonQueryAsync();
-
-        Assert.Equal(0, result); // SQLite returns 0 for DDL statements
-    }
-
-    [Fact]
     public async Task ExecuteNonQueryAsync_InsertsData()
     {
-        var qp = _context.QuotePrefix;
-        var qs = _context.QuoteSuffix;
-        var container = await BuildTestTable();
+        var qp = Context.QuotePrefix;
+        var qs = Context.QuoteSuffix;
+        await BuildTestTable();
+        var container = Context.CreateSqlContainer();
         AssertProperNumberOfConnectionsForMode();
-        var p = container.AppendParameter(  DbType.String, "TestName");
+        var p = container.AddParameterWithValue(DbType.String, "TestName");
         container.Query.AppendFormat("INSERT INTO {0}Test{1} ({0}Name{1}) VALUES ({2})", qp, qs,
-            _context.MakeParameterName(p));
+            Context.MakeParameterName(p));
 
         var result = await container.ExecuteNonQueryAsync();
 
@@ -86,13 +74,14 @@ public class SqlContainerTests : IDisposable
     [Fact]
     public async Task ExecuteScalarAsync_ReturnsValue_WhenRowExists()
     {
-        var qp = _context.QuotePrefix;
-        var qs = _context.QuoteSuffix;
-        var container = await BuildTestTable();
+        var qp = Context.QuotePrefix;
+        var qs = Context.QuoteSuffix;
+        await BuildTestTable();
+        var container = Context.CreateSqlContainer();
         AssertProperNumberOfConnectionsForMode();
-        var p = container.AppendParameter( DbType.String, "TestName");
+        var p = container.AddParameterWithValue(DbType.String, "TestName");
         container.Query.AppendFormat("INSERT INTO {0}Test{1} ({0}Name{1}) VALUES ({2})", qp, qs,
-            _context.MakeParameterName(p));
+            Context.MakeParameterName(p));
         await container.ExecuteNonQueryAsync();
         container.Clear();
         container.Query.AppendFormat("SELECT {0}Name{1} FROM {0}Test{1} WHERE {0}Id{1} = 1", qp, qs);
@@ -105,9 +94,10 @@ public class SqlContainerTests : IDisposable
     [Fact]
     public async Task ExecuteScalarAsync_ThrowsException_WhenNoRows()
     {
-        var qp = _context.QuotePrefix;
-        var qs = _context.QuoteSuffix;
-        var container = await BuildTestTable();
+        var qp = Context.QuotePrefix;
+        var qs = Context.QuoteSuffix;
+        await BuildTestTable();
+        var container = Context.CreateSqlContainer();
 
         container.Query.AppendFormat("SELECT {0}Name{1} FROM {0}Test{1} WHERE {0}Id{1} = 1", qp, qs);
 
@@ -115,40 +105,65 @@ public class SqlContainerTests : IDisposable
         AssertProperNumberOfConnectionsForMode();
     }
 
+    [Fact]
+    public async Task TryUpdateVersion()
+    {
+        await BuildTestTable();
+        var tmp = new TestEntity
+        {
+            Name = Guid.NewGuid().ToString()
+        };
+        var c = this.entityHelper.BuildCreate(tmp);
+        await c.ExecuteNonQueryAsync();
+        var sc = this.entityHelper.BuildBaseRetrieve("a");
+        var list = await entityHelper.LoadListAsync(sc);
+
+        Assert.True(list.Count > 0);
+        var fisrt = list.First();
+        fisrt.Name = Guid.NewGuid().ToString();
+        var sc1 = await entityHelper.BuildUpdateAsync(fisrt);
+        var recordCount = await sc1.ExecuteNonQueryAsync();
+        Assert.Equal(1, recordCount);
+    }
+
+    [Fact]
     private void AssertProperNumberOfConnectionsForMode()
     {
-        switch (_context.ConnectionMode)
+        switch (Context.ConnectionMode)
         {
             case DbMode.Standard:
-                Assert.Equal(0, _context.NumberOfOpenConnections);
+                Assert.Equal(0, Context.NumberOfOpenConnections);
                 break;
             default:
-                Assert.NotEqual(0, _context.NumberOfOpenConnections);
+                Assert.NotEqual(0, Context.NumberOfOpenConnections);
                 break;
         }
     }
 
-    private async Task<ISqlContainer> BuildTestTable()
+    private async Task BuildTestTable()
     {
-        var qp = _context.QuotePrefix;
-        var qs = _context.QuoteSuffix;
-        var sql = string.Format("CREATE TABLE {0}Test{1} ({0}Id{1} INTEGER PRIMARY KEY, {0}Name{1} TEXT)", qp, qs);
-        var container = _context.CreateSqlContainer(sql);
+        var qp = Context.QuotePrefix;
+        var qs = Context.QuoteSuffix;
+        var sql = string.Format(
+            @"CREATE TABLE IF NOT EXISTS
+{0}Test{1} ({0}Id{1} INTEGER PRIMARY KEY, 
+{0}Name{1} TEXT,
+{0}Version{1} INTEGER NOT NULL DEFAULT 0)", qp, qs);
+        var container = Context.CreateSqlContainer(sql);
         await container.ExecuteNonQueryAsync();
-        container.Clear();
-        return container;
     }
 
     [Fact]
     public async Task ExecuteReaderAsync_ReturnsData()
     {
-        var container = await BuildTestTable();
+        await BuildTestTable();
+        var container = Context.CreateSqlContainer();
         AssertProperNumberOfConnectionsForMode();
-        var qp = _context.QuotePrefix;
-        var qs = _context.QuoteSuffix;
-        var p = container.AppendParameter(  DbType.String, "TestName");
+        var qp = Context.QuotePrefix;
+        var qs = Context.QuoteSuffix;
+        var p = container.AddParameterWithValue(DbType.String, "TestName");
         container.Query.AppendFormat("INSERT INTO {0}Test{1} ({0}Name{1}) VALUES ({2})", qp, qs,
-            _context.MakeParameterName(p));
+            Context.MakeParameterName(p));
         await container.ExecuteNonQueryAsync();
         AssertProperNumberOfConnectionsForMode();
         container.Clear();
@@ -168,7 +183,7 @@ public class SqlContainerTests : IDisposable
         var typeMap = new TypeMapRegistry();
         typeMap.Register<IdentityTestEntity>(); // assumes you auto-build TableInfo from attributes
 
-        var helper = new EntityHelper<IdentityTestEntity, int>(_context, null);
+        var helper = new EntityHelper<IdentityTestEntity, int>(Context, null);
 
         var entity = new IdentityTestEntity { Id = 42, Name = "Hello" };
 
@@ -177,38 +192,10 @@ public class SqlContainerTests : IDisposable
         var sql = container.Query.ToString();
 
         // Assert
-        var columnId = _context.WrapObjectName("Id");
-        var columnName = _context.WrapObjectName("Name");
+        var columnId = Context.WrapObjectName("Id");
+        var columnName = Context.WrapObjectName("Name");
         Assert.DoesNotContain(columnId, sql, StringComparison.OrdinalIgnoreCase); // check it's not in the SQL
         Assert.Contains(columnName, sql, StringComparison.OrdinalIgnoreCase); // check that another field is included
         Assert.StartsWith("INSERT INTO", sql, StringComparison.OrdinalIgnoreCase); // sanity check
     }
-
-    // [Theory]
-    // [InlineData(ProcWrappingStyle.PostgreSQL, ExecutionType.Read, "SELECT * FROM test_proc")]
-    // [InlineData(ProcWrappingStyle.PostgreSQL, ExecutionType.Write, "CALL test_proc")]
-    // [InlineData(ProcWrappingStyle.Oracle, ExecutionType.Read, "BEGIN\ntest_proc;\nEND;")]
-    // [InlineData(ProcWrappingStyle.Exec, ExecutionType.Write, "EXEC test_proc")]
-    // public void WrapForStoredProc_ReturnsCorrectFormat(ProcWrappingStyle style, ExecutionType execType,
-    //     string expected)
-    // {
-    //  var container = _context.CreateSqlContainer();
-    //     await container.ExecuteNonQueryAsync(CommandType.Text);
-    //       container.Query.Append("test_proc");
-    //
-    //     var result = container.WrapForStoredProc(execType);
-    //
-    //     Assert.Equal(expected, result);
-    // }
-    //
-    // [Fact]
-    // public void Dispose_ClearsResources()
-    // {
-    //     var param = container.AppendParameter("@test", DbType.String, "value");
-    //     container.Query.Append("SELECT * FROM test");
-    //
-    //     container.Dispose();
-    //
-    //     Assert.Equal(0, container.Query.Length);
-    // }
 }

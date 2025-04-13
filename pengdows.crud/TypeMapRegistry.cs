@@ -1,6 +1,7 @@
 #region
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using pengdows.crud.attributes;
@@ -12,13 +13,13 @@ namespace pengdows.crud;
 
 public class TypeMapRegistry : ITypeMapRegistry
 {
-    private readonly ConcurrentDictionary<Type, TableInfo> TypeMap = new();
+    private readonly ConcurrentDictionary<Type, TableInfo> _typeMap = new();
 
     public TableInfo GetTableInfo<T>()
     {
         var type = typeof(T);
 
-        if (!TypeMap.TryGetValue(type, out var tableInfo))
+        if (!_typeMap.TryGetValue(type, out var tableInfo))
         {
             tableInfo = new TableInfo
             {
@@ -46,7 +47,7 @@ public class TypeMapRegistry : ITypeMapRegistry
                         JsonSerializerOptions = prop.GetCustomAttribute<JsonAttribute>()?.SerializerOptions ??
                                                 JsonSerializerOptions.Default,
                         IsPrimaryKey = prop.GetCustomAttribute<PrimaryKeyAttribute>() != null,
-                        IsVersionColumn = prop.GetCustomAttribute<VersionAttribute>() != null,
+                        IsVersion = prop.GetCustomAttribute<VersionAttribute>() != null,
                         IsCreatedBy = prop.GetCustomAttribute<CreatedByAttribute>() != null,
                         IsCreatedOn = prop.GetCustomAttribute<CreatedOnAttribute>() != null,
                         IsLastUpdatedBy = prop.GetCustomAttribute<LastUpdatedByAttribute>() != null,
@@ -72,7 +73,7 @@ public class TypeMapRegistry : ITypeMapRegistry
                                 "Not allowed to have primary key attribute on id column.");
                     }
 
-                    if (ci.IsVersionColumn)
+                    if (ci.IsVersion)
                     {
                         if (tableInfo.Version != null) throw new TooManyColumns("Only one version is allowed.");
 
@@ -81,7 +82,7 @@ public class TypeMapRegistry : ITypeMapRegistry
                 }
             }
 
-            TypeMap[type] = tableInfo;
+            _typeMap[type] = tableInfo;
         }
 
         if (tableInfo.Columns.Count == 0)

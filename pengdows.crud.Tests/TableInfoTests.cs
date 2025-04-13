@@ -21,11 +21,8 @@ public class TableInfoTests
     [Table("Sample")]
     private class SampleEntity
     {
-        [Id] 
-        [Column("Id", DbType.Guid)]
-        public Guid Id { get; set; }
+        [Id] [Column("Id", DbType.Guid)] public Guid Id { get; set; }
 
-        [Column("Name", DbType.String)]
-        public string Name { get; set; }
+        [Column("Name", DbType.String)] public string Name { get; set; }
     }
 }

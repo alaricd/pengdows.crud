@@ -20,8 +20,6 @@ public class TypeMapRegistryTests
     [Table("MyEntity")]
     private class MyEntity
     {
-        [Id]
-        [Column("Id", DbType.Int32)]
-        public int Id { get; set; }
+        [Id] [Column("Id", DbType.Int32)] public int Id { get; set; }
     }
 }

@@ -14,7 +14,6 @@ public class ColumnInfo
     public PropertyInfo PropertyInfo { get; init; }
     public bool IsId { get; init; } = false;
     public DbType DbType { get; set; }
-    public bool IsVersion { get; set; }
     public bool IsNonUpdateable { get; set; }
     public bool IsEnum { get; set; }
     public Type? EnumType { get; set; }
@@ -22,7 +21,7 @@ public class ColumnInfo
     public JsonSerializerOptions JsonSerializerOptions { get; set; } = JsonSerializerOptions.Default;
     public bool IsIdIsWritable { get; set; }
     public bool IsPrimaryKey { get; set; } = false;
-    public bool IsVersionColumn { get; set; }
+    public bool IsVersion { get; set; }
     public bool IsCreatedBy { get; set; }
     public bool IsCreatedOn { get; set; }
     public bool IsLastUpdatedBy { get; set; }

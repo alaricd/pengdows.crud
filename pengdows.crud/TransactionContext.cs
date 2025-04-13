@@ -2,6 +2,7 @@
 
 using System.Data;
 using System.Data.Common;
+using pengdows.crud.wrappers;
 
 #endregion
 
@@ -9,9 +10,9 @@ namespace pengdows.crud;
 
 public class TransactionContext : ITransactionContext
 {
-    private readonly DbConnection _connection;
+    private readonly ITrackedConnection _connection;
     private readonly DatabaseContext _context;
-    private readonly DbTransaction _transaction;
+    private readonly IDbTransaction _transaction;
     private bool _committed;
     private long _disposed;
     private bool _isCompleted;
@@ -86,6 +87,8 @@ public class TransactionContext : ITransactionContext
     public string CompositeIdentifierSeparator => _context.CompositeIdentifierSeparator;
     public SupportedDatabase Product => _context.Product;
 
+    public long MaxNumberOfConnections => _context.MaxNumberOfConnections;
+
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
         if (IsCompleted)
@@ -98,7 +101,7 @@ public class TransactionContext : ITransactionContext
         return _context.CreateDbParameter(name, type, value);
     }
 
-    public DbConnection GetConnection(ExecutionType type)
+    public ITrackedConnection GetConnection(ExecutionType type)
     {
         return _connection;
     }
@@ -133,9 +136,14 @@ public class TransactionContext : ITransactionContext
         _context.AssertIsWriteConnection();
     }
 
-    public void CloseAndDisposeConnection(DbConnection connection)
+    public string MakeParameterName(string parameterName)
     {
-        //   _context.CloseAndDisposeConnection(connection);
+        return _context.MakeParameterName(parameterName);
+    }
+
+    public void CloseAndDisposeConnection(ITrackedConnection? connection)
+    {
+        //  _context.CloseAndDisposeConnection(connection);
     }
 
     public string MakeParameterName(DbParameter dbParameter)
@@ -143,7 +151,11 @@ public class TransactionContext : ITransactionContext
         return _context.MakeParameterName(dbParameter);
     }
 
-    public ProcWrappingStyle ProcWrappingStyle => _context.DataSourceInfo.ProcWrappingStyle;
+    public ProcWrappingStyle ProcWrappingStyle
+    {
+        get => _context.DataSourceInfo.ProcWrappingStyle;
+        set => throw new NotImplementedException();
+    }
 
 
     public int MaxParameterLimit => _context.DataSourceInfo.MaxParameterLimit;
@@ -156,7 +168,7 @@ public class TransactionContext : ITransactionContext
 
     public string SessionSettingsPreamble => _context.SessionSettingsPreamble;
 
-    internal DbTransaction Transaction => _transaction;
+    internal IDbTransaction Transaction => _transaction;
 
     public void Commit()
     {
