@@ -53,6 +53,9 @@
 	<s:Boolean x:Key="/Default/Environment/UnitTesting/CreateUnitTestDialog/ShowAdvancedOptions/@EntryValue">True</s:Boolean>
 	<s:String x:Key="/Default/Environment/UnitTesting/CreateUnitTestDialog/TestProjectMapping/=85659FF1_002DADA5_002D4C41_002D9863_002DD6797A02AB51/@EntryIndexedValue">7338F4D1-5A9D-4788-A39E-1DB08C822DA4</s:String>
 	<s:String x:Key="/Default/Environment/UnitTesting/CreateUnitTestDialog/TestTemplateMapping/=xUnit/@EntryIndexedValue">33ff99d8-b1ad-4ed5-a4fd-376b97c2c841</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=1239ee48_002D6861_002D492a_002Db821_002D542ff1064b90/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="All tests from Solution" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
+  &lt;Solution /&gt;
+&lt;/SessionState&gt;</s:String>
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=26b6e105_002Dd732_002D4fa8_002Db90a_002Df03604bc7d21/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="All tests from &amp;lt;pengdows.crud.Tests&amp;gt;" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
   &lt;Project Location="/home/alaricd/prj/pengdows.crud/pengdows.crud.Tests" Presentation="&amp;lt;pengdows.crud.Tests&amp;gt;" /&gt;
 &lt;/SessionState&gt;</s:String>

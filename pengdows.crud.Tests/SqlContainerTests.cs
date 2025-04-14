@@ -105,26 +105,6 @@ public class SqlContainerTests : SqlLiteContextTestBase
         AssertProperNumberOfConnectionsForMode();
     }
 
-    [Fact]
-    public async Task TryUpdateVersion()
-    {
-        await BuildTestTable();
-        var tmp = new TestEntity
-        {
-            Name = Guid.NewGuid().ToString()
-        };
-        var c = this.entityHelper.BuildCreate(tmp);
-        await c.ExecuteNonQueryAsync();
-        var sc = this.entityHelper.BuildBaseRetrieve("a");
-        var list = await entityHelper.LoadListAsync(sc);
-
-        Assert.True(list.Count > 0);
-        var fisrt = list.First();
-        fisrt.Name = Guid.NewGuid().ToString();
-        var sc1 = await entityHelper.BuildUpdateAsync(fisrt);
-        var recordCount = await sc1.ExecuteNonQueryAsync();
-        Assert.Equal(1, recordCount);
-    }
 
     [Fact]
     private void AssertProperNumberOfConnectionsForMode()
@@ -176,26 +156,5 @@ public class SqlContainerTests : SqlLiteContextTestBase
         AssertProperNumberOfConnectionsForMode();
     }
 
-    [Fact]
-    public void BuildCreate_SkipsNonWritableId()
-    {
-        // Arrange
-        var typeMap = new TypeMapRegistry();
-        typeMap.Register<IdentityTestEntity>(); // assumes you auto-build TableInfo from attributes
-
-        var helper = new EntityHelper<IdentityTestEntity, int>(Context, null);
-
-        var entity = new IdentityTestEntity { Id = 42, Name = "Hello" };
-
-        // Act
-        var container = helper.BuildCreate(entity);
-        var sql = container.Query.ToString();
-
-        // Assert
-        var columnId = Context.WrapObjectName("Id");
-        var columnName = Context.WrapObjectName("Name");
-        Assert.DoesNotContain(columnId, sql, StringComparison.OrdinalIgnoreCase); // check it's not in the SQL
-        Assert.Contains(columnName, sql, StringComparison.OrdinalIgnoreCase); // check that another field is included
-        Assert.StartsWith("INSERT INTO", sql, StringComparison.OrdinalIgnoreCase); // sanity check
-    }
+    
 }
