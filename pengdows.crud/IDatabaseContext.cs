@@ -26,6 +26,11 @@ public interface IDatabaseContext : IDisposable
     SupportedDatabase Product { get; }
     long MaxNumberOfConnections { get; }
 
+    string DatabaseProductName => DataSourceInfo.DatabaseProductName;
+
+    bool PrepareStatements => DataSourceInfo.PrepareStatements;
+    bool SupportsNamedParameters => DataSourceInfo.SupportsNamedParameters;
+
     ISqlContainer CreateSqlContainer(string? query = null);
     DbParameter CreateDbParameter<T>(string name, DbType type, T value);
     ITrackedConnection GetConnection(ExecutionType executionType);

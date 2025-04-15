@@ -104,9 +104,16 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
 
                 var dbFieldType = reader.GetFieldType(i);
                 value = TypeCoercionHelper.Coerce(value, dbFieldType, column);
-
-                var setter = GetOrCreateSetter(column.PropertyInfo);
-                setter(obj, value);
+                try
+                {
+                    var setter = GetOrCreateSetter(column.PropertyInfo);
+                    setter(obj, value);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidValueException(
+                        $"Unable to set property from value that was stored in the database: {colName} :{ex.Message}");
+                }
             }
         }
 
@@ -154,6 +161,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     {
         if (objectToCreate == null)
             throw new ArgumentNullException(nameof(objectToCreate));
+
         var ctx = context ?? _context;
         var columns = new StringBuilder();
         var values = new StringBuilder();

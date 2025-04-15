@@ -140,9 +140,12 @@ public class SqlContainer : ISqlContainer
 
     public void AddParameters(IEnumerable<DbParameter> list)
     {
-        if (list != null && list.Any())
+        if (list != null)
         {
-            _parameters.AddRange(list);
+            foreach (var p in list.OfType<DbParameter>())
+            {
+                AddParameter(p);
+            }
         }
     }
 
@@ -211,7 +214,7 @@ public class SqlContainer : ISqlContainer
                 return string.Empty;
 
             // Named parameter support check
-            if (_context.DataSourceInfo.SupportsNamedParameters)
+            if (_context.SupportsNamedParameters)
             {
                 // Trust that dev has set correct names
                 return string.Join(", ", _parameters.Select(p => _context.MakeParameterName(p)));
@@ -236,14 +239,14 @@ public class SqlContainer : ISqlContainer
             : Query.ToString();
         if (_parameters.Count > _context.MaxParameterLimit)
             throw new InvalidOperationException(
-                $"Query exceeds the maximum parameter limit of {_context.DataSourceInfo.MaxParameterLimit} for {_context.DataSourceInfo.DatabaseProductName}.");
+                $"Query exceeds the maximum parameter limit of {_context.MaxParameterLimit} for {_context.DatabaseProductName}.");
 
         if (_parameters.Count > 0)
         {
             cmd.Parameters.AddRange(_parameters.ToArray());
         }
 
-        if (_context.DataSourceInfo.PrepareStatements)
+        if (_context.PrepareStatements)
         {
             cmd.Prepare();
         }

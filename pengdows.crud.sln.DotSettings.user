@@ -62,6 +62,9 @@
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=3fe0c34e_002D6810_002D48d0_002D86a0_002D331cc9532a32/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="All tests from &amp;lt;pengdows.crud.Tests&amp;gt; #2" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
   &lt;Project Location="/home/alaricd/prj/pengdows.crud/pengdows.crud.Tests" Presentation="&amp;lt;pengdows.crud.Tests&amp;gt;" /&gt;
 &lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=44401e45_002D7cdf_002D4f06_002Db14f_002D6bad3a7dceed/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="All tests from Solution" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
+  &lt;Solution /&gt;
+&lt;/SessionState&gt;</s:String>
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=6a0cc4ce_002D85a8_002D49d8_002D8b28_002D1280d6f1200a/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="AppendParameter_GeneratesRandomName_WhenNameIsNull" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
   &lt;TestAncestor&gt;
     &lt;TestId&gt;xUnit::7338F4D1-5A9D-4788-A39E-1DB08C822DA4::net8.0::pengdows.crud.tests.SqlContainerTests.AppendParameter_GeneratesRandomName_WhenNameIsNull&lt;/TestId&gt;
