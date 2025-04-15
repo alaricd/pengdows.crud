@@ -12,3 +12,4 @@ sed -i "s|<Version>.*</Version>|<Version>$VERSION</Version>|" pengdows.crud.cspr
 
 # Build and pack with updated version
 dotnet pack -c Debug
+dotnet nuget push ./bin/Debug/pengdows.crud.1.0.${EPOCH}.nupkg --api-key $(cat ~/token.txt) --source https://api.nuget.org/v3/index.json
