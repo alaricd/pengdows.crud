@@ -1,3 +1,4 @@
+using pengdows.crud.exceptions;
 using Xunit;
 
 namespace pengdows.crud.Tests;

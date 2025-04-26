@@ -1,4 +1,5 @@
 using System.Data;
+using pengdows.crud.threading;
 
 namespace pengdows.crud.wrappers;
 
@@ -20,4 +21,6 @@ public interface ITrackedConnection : IDbConnection
     DataTable GetSchema(string dataSourceInformation);
     void Dispose();
     ValueTask DisposeAsync();
+
+    ILockerAsync GetLock();
 }

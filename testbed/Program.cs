@@ -19,6 +19,7 @@ using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory
 {
     var lite = new TestProvider(liteDb, host.Services);
     await lite.RunTest();
+    liteDb.Dispose();
     
 }
 

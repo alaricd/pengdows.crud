@@ -3,34 +3,35 @@
 using System.Data.Common;
 using System.Reflection;
 using pengdows.crud.enums;
+using pengdows.crud.wrappers;
 
 #endregion
 
 namespace pengdows.crud;
 
-public interface IEntityHelper<T, TID> where T : class, new()
+public interface IEntityHelper<TEntity, TRowID> where TEntity : class, new()
 {
     string WrappedTableName { get; }
     public EnumParseFailureMode EnumParseBehavior { get; set; }
-    ISqlContainer BuildCreate(T objectToCreate, IDatabaseContext? context = null);
+    ISqlContainer BuildCreate(TEntity objectToCreate, IDatabaseContext? context = null);
     ISqlContainer BuildBaseRetrieve(string alias, IDatabaseContext? context = null);
-    ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, string alias = "a", IDatabaseContext? context = null);
-    ISqlContainer BuildRetrieve(List<T>? listOfObjects = null, string alias = "a", IDatabaseContext? context = null);
-    ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null);
-    ISqlContainer BuildRetrieve(List<T>? listOfObjects = null, IDatabaseContext? context = null);
+    ISqlContainer BuildRetrieve(IReadOnlyCollection<TRowID>? listOfIds = null, string alias = "a", IDatabaseContext? context = null);
+    ISqlContainer BuildRetrieve(IReadOnlyCollection<TEntity>? listOfObjects = null, string alias = "a", IDatabaseContext? context = null);
+    ISqlContainer BuildRetrieve(IReadOnlyCollection<TRowID>? listOfIds = null, IDatabaseContext? context = null);
+    ISqlContainer BuildRetrieve(IReadOnlyCollection<TEntity>? listOfObjects = null, IDatabaseContext? context = null);
 
-    Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, IDatabaseContext? context = null);
+    Task<ISqlContainer> BuildUpdateAsync(TEntity objectToUpdate, IDatabaseContext? context = null);
 
-    Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, bool loadOriginal,
+    Task<ISqlContainer> BuildUpdateAsync(TEntity objectToUpdate, bool loadOriginal,
         IDatabaseContext? context = null);
 
-    ISqlContainer BuildDelete(TID id, IDatabaseContext? context = null);
-    public Task<T?> RetrieveOneAsync(T objectToRetrieve, IDatabaseContext? context = null);
-    public Task<T?> LoadSingleAsync(ISqlContainer sc);
-    public Task<List<T>> LoadListAsync(ISqlContainer sc);
+    ISqlContainer BuildDelete(TRowID id, IDatabaseContext? context = null);
+    public Task<TEntity?> RetrieveOneAsync(TEntity objectToRetrieve, IDatabaseContext? context = null);
+    public Task<TEntity?> LoadSingleAsync(ISqlContainer sc);
+    public Task<List<TEntity>> LoadListAsync(ISqlContainer sc);
     string MakeParameterName(DbParameter p);
     Action<object, object?> GetOrCreateSetter(PropertyInfo prop);
-    T MapReaderToObject(DbDataReader reader);
-    ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TID> ids, ISqlContainer sqlContainer);
-    public void BuildWhereByPrimaryKey(List<T>? listOfObjects, ISqlContainer sc, string alias = "a");
+    TEntity MapReaderToObject(ITrackedReader reader);
+    ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TRowID> ids, ISqlContainer sqlContainer);
+    public void BuildWhereByPrimaryKey(IReadOnlyCollection<TEntity>? listOfObjects, ISqlContainer sc, string alias = "a");
 }

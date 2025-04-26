@@ -1,4 +1,4 @@
-namespace pengdows.crud;
+namespace pengdows.crud.exceptions;
 
 public class NoColumnsFoundException : Exception
 {

@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using pengdows.crud.enums;
 using pengdows.crud.wrappers;
 
 #endregion
@@ -78,7 +79,12 @@ public class SqlContainer : ISqlContainer
         DbCommand cmd = null;
         try
         {
-            conn = _context.GetConnection(ExecutionType.Write);
+            await using var contextLocker = _context.GetLock();
+            await contextLocker.LockAsync();
+            var isTransaction = _context is ITransactionContext;
+            conn = _context.GetConnection(ExecutionType.Write, isTransaction);
+            await using var connectionLocker = conn.GetLock();
+            await connectionLocker.LockAsync();
             cmd = PrepareCommand(conn, commandType, ExecutionType.Write);
 
             return await cmd.ExecuteNonQueryAsync();
@@ -103,7 +109,7 @@ public class SqlContainer : ISqlContainer
         throw new Exception("No rows returned");
     }
 
-    public async Task<DbDataReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text)
+    public async Task<ITrackedReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text)
     {
         _context.AssertIsReadConnection();
 
@@ -111,14 +117,21 @@ public class SqlContainer : ISqlContainer
         DbCommand cmd = null;
         try
         {
-            conn = _context.GetConnection(ExecutionType.Read);
+            await using var contextLocker = _context.GetLock();
+            await contextLocker.LockAsync();
+            var isTransaction = _context is ITransactionContext;
+            conn = _context.GetConnection(ExecutionType.Read, isTransaction);
+            var connectionLocker = conn.GetLock();
+            await connectionLocker.LockAsync();
             cmd = PrepareCommand(conn, commandType, ExecutionType.Read);
 
             // unless the databaseContext is in a transaction or SingleConnection mode, 
             // a new connection is returned for every READ operation, therefore, we 
             // are going to set the connection to close and dispose when the reader is 
             // closed. This prevents leaking
-            var behavior = _context is TransactionContext || _context.ConnectionMode == DbMode.SingleConnection
+            var isSingleConnection = _context.ConnectionMode == DbMode.SingleConnection;
+            var isReadOnlyConnection = _context.IsReadOnlyConnection;
+            var behavior = (isTransaction || isSingleConnection)
                 ? CommandBehavior.Default
                 : CommandBehavior.CloseConnection;
             //behavior |= CommandBehavior.SingleResult;
@@ -128,7 +141,7 @@ public class SqlContainer : ISqlContainer
             // otherwise, we will have the connection set to autoclose so that we 
             //close the underlying connection when the DbDataReader is closed;
             var dr = await cmd.ExecuteReaderAsync(behavior).ConfigureAwait(false);
-            return dr;
+            return new TrackedReader(dr, conn, connectionLocker, behavior == CommandBehavior.CloseConnection);
         }
         finally
         {

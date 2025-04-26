@@ -8,12 +8,14 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using pengdows.crud.attributes;
 using pengdows.crud.enums;
+using pengdows.crud.exceptions;
+using pengdows.crud.wrappers;
 
 #endregion
 
 namespace pengdows.crud;
 
-public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
+public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> where TEntity : class, new()
 {
     // Cache for compiled property setters
     private static readonly ConcurrentDictionary<PropertyInfo, Action<object, object?>> _propertySetters = new();
@@ -36,8 +38,8 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         _serviceProvider = serviceProvider;
         var typemap = serviceProvider?.GetService<ITypeMapRegistry>() ?? new TypeMapRegistry();
 
-        _tableInfo = typemap.GetTableInfo<T>() ??
-                     throw new InvalidOperationException($"Type {typeof(T).FullName} is not a table.");
+        _tableInfo = typemap.GetTableInfo<TEntity>() ??
+                     throw new InvalidOperationException($"Type {typeof(TEntity).FullName} is not a table.");
         var propertyInfoPropertyType = _tableInfo.Columns
             .Values
             .FirstOrDefault(c =>
@@ -91,9 +93,9 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         });
     }
 
-    public T MapReaderToObject(DbDataReader reader)
+    public TEntity MapReaderToObject(ITrackedReader reader)
     {
-        var obj = new T();
+        var obj = new TEntity();
 
         for (var i = 0; i < reader.FieldCount; i++)
         {
@@ -121,16 +123,16 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
 
-    public Task<T?> RetrieveOneAsync(T objectToRetrieve, IDatabaseContext? context = null)
+    public Task<TEntity?> RetrieveOneAsync(TEntity objectToRetrieve, IDatabaseContext? context = null)
     {
         var ctx = context ?? _context;
-        var id = (TID)_idColumn.PropertyInfo.GetValue(objectToRetrieve);
-        var list = new List<TID>() { id };
+        var id = (TRowID)_idColumn.PropertyInfo.GetValue(objectToRetrieve);
+        var list = new List<TRowID>() { id };
         var sc = BuildRetrieve(list, null, ctx);
         return LoadSingleAsync(sc);
     }
 
-    public async Task<T?> LoadSingleAsync(ISqlContainer sc)
+    public async Task<TEntity?> LoadSingleAsync(ISqlContainer sc)
     {
         await using var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
         if (await reader.ReadAsync().ConfigureAwait(false)) return MapReaderToObject(reader);
@@ -138,9 +140,9 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return null;
     }
 
-    public async Task<List<T>> LoadListAsync(ISqlContainer sc)
+    public async Task<List<TEntity>> LoadListAsync(ISqlContainer sc)
     {
-        var list = new List<T>();
+        var list = new List<TEntity>();
 
         await using var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
 
@@ -157,7 +159,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
 
-    public ISqlContainer BuildCreate(T objectToCreate, IDatabaseContext? context = null)
+    public ISqlContainer BuildCreate(TEntity objectToCreate, IDatabaseContext? context = null)
     {
         if (objectToCreate == null)
             throw new ArgumentNullException(nameof(objectToCreate));
@@ -233,7 +235,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return sc;
     }
 
-    public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null,
+    public ISqlContainer BuildRetrieve(IReadOnlyCollection<TRowID>? listOfIds = null,
         string alias = "a", IDatabaseContext? context = null)
     {
         var ctx = context ?? _context;
@@ -254,8 +256,8 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return sc;
     }
 
-    public ISqlContainer BuildRetrieve(List<T>? listOfObjects = null,
-        string alias = "a", IDatabaseContext context = null)
+    public ISqlContainer BuildRetrieve(IReadOnlyCollection<TEntity>? listOfObjects = null,
+        string alias = "a", IDatabaseContext? context = null)
     {
         var ctx = context ?? _context;
         var sc = BuildBaseRetrieve(alias, ctx);
@@ -273,17 +275,18 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return sc;
     }
 
-    public ISqlContainer BuildRetrieve(List<TID>? listOfIds = null, IDatabaseContext? context = null)
+    public ISqlContainer BuildRetrieve(IReadOnlyCollection<TRowID>? listOfIds = null, IDatabaseContext? context = null)
     {
         return BuildRetrieve(listOfIds, null, context);
     }
 
-    public ISqlContainer BuildRetrieve(List<T>? listOfObjects = null, IDatabaseContext? context = null)
+    public ISqlContainer BuildRetrieve(IReadOnlyCollection<TEntity>? listOfObjects = null,
+        IDatabaseContext? context = null)
     {
         return BuildRetrieve(listOfObjects, null, context);
     }
 
-    public void BuildWhereByPrimaryKey(List<T>? listOfObjects, ISqlContainer sc, string alias = "")
+    public void BuildWhereByPrimaryKey(IReadOnlyCollection<TEntity>? listOfObjects, ISqlContainer sc, string alias = "")
     {
         if (Utils.IsNullOrEmpty(listOfObjects) || sc == null)
         {
@@ -293,7 +296,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var listOfPrimaryKeys = _tableInfo.Columns.Values.Where(o => o.IsPrimaryKey).ToList();
         if (listOfPrimaryKeys.Count < 1)
         {
-            throw new Exception($"No primary keys found for type {typeof(T).Name}");
+            throw new Exception($"No primary keys found for type {typeof(TEntity).Name}");
         }
 
         // Calculate total parameter count to avoid exceeding DB limits
@@ -313,9 +316,9 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             : WrapObjectName(alias) + _context.CompositeIdentifierSeparator;
 
         // Construct WHERE clause as series of (pk1 = val AND pk2 = val) OR (...)...
-        for (var i = 0; i < listOfObjects.Count; i++)
+        var i = 0;
+        foreach (var entity in listOfObjects)
         {
-            var entity = listOfObjects[i];
             if (i > 0)
             {
                 sb.Append(" OR ");
@@ -352,6 +355,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             }
 
             sb.Append(")");
+            i++;
         }
 
         if (sb.Length < 1)
@@ -378,13 +382,13 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
 
-    public Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, IDatabaseContext? context = null)
+    public Task<ISqlContainer> BuildUpdateAsync(TEntity objectToUpdate, IDatabaseContext? context = null)
     {
         var ctx = context ?? _context;
         return BuildUpdateAsync(objectToUpdate, _versionColumn != null, ctx);
     }
 
-    public async Task<ISqlContainer> BuildUpdateAsync(T objectToUpdate, bool loadOriginal,
+    public async Task<ISqlContainer> BuildUpdateAsync(TEntity objectToUpdate, bool loadOriginal,
         IDatabaseContext? context = null)
     {
         if (objectToUpdate == null)
@@ -395,7 +399,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var parameters = new List<DbParameter>();
         SetAuditFields(objectToUpdate, true);
         var sc = context.CreateSqlContainer();
-        var original = null as T;
+        var original = null as TEntity;
 
         if (loadOriginal)
         {
@@ -415,8 +419,9 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
             var newValue = column.MakeParameterValueFromField(objectToUpdate);
             var originalValue = loadOriginal ? column.MakeParameterValueFromField(original) : null;
 
-            // Skip unchanged values if original is loaded.
-            if (loadOriginal && Equals(newValue, originalValue)) continue;
+            if (loadOriginal && Equals(newValue, originalValue))
+                // Skip unchanged values if original is loaded.
+                continue;
 
             if (setClause.Length > 0) setClause.Append(", ");
 
@@ -473,7 +478,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         return sc;
     }
 
-    public ISqlContainer BuildDelete(TID id, IDatabaseContext? context = null)
+    public ISqlContainer BuildDelete(TRowID id, IDatabaseContext? context = null)
     {
         var ctx = context ?? _context;
         var sc = ctx.CreateSqlContainer();
@@ -503,7 +508,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
 
-    public ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TID> ids, ISqlContainer sqlContainer)
+    public ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TRowID> ids, ISqlContainer sqlContainer)
     {
         var enumerable = ids?.Distinct().ToList();
         if (Utils.IsNullOrEmpty(enumerable)) return sqlContainer;
@@ -514,6 +519,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
         var dbType = _idColumn!.DbType;
         var idx = 0;
         foreach (var id in enumerable)
+        {
             if (!hasNull || !Utils.IsNullOrDbNull(id))
             {
                 if (sb.Length > 0) sb.Append(", ");
@@ -522,6 +528,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
                 var name = MakeParameterName(p);
                 sb.Append(name);
             }
+        }
 
         if (sb.Length > 0)
         {
@@ -541,7 +548,7 @@ public class EntityHelper<T, TID> : IEntityHelper<T, TID> where T : class, new()
     }
 
 
-    private void SetAuditFields(T obj, bool updateOnly)
+    private void SetAuditFields(TEntity obj, bool updateOnly)
     {
         if (_userFieldType == null || _serviceProvider == null || obj == null)
             return;

@@ -1,6 +1,6 @@
 namespace pengdows.crud.threading;
 
-internal interface ILockerAsync : IAsyncDisposable
+public interface ILockerAsync : IAsyncDisposable
 {
     Task LockAsync();
 }

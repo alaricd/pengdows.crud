@@ -1,9 +1,9 @@
 namespace pengdows.crud;
 
-public abstract class AuditContextProvider<T>
-    : IAuditContextProvider<T>
+public abstract class AuditContextProvider<TUserId>
+    : IAuditContextProvider<TUserId>
 {
-    public abstract T GetCurrentUserIdentifier();
+    public abstract TUserId GetCurrentUserIdentifier();
 
     public DateTime GetUtcNow()
     {

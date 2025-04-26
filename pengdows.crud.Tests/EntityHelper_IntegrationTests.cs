@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using pengdows.crud.enums;
 using Xunit;
 
 namespace pengdows.crud.Tests;
@@ -122,7 +123,7 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
     public async Task MapReaderToObject_MapsCorrectly()
     {
         await BuildTestTable();
-        string s = Guid.NewGuid().ToString();
+        var s = Guid.NewGuid().ToString();
         var tmp = new TestEntity { Name = s };
         var create = entityHelper.BuildCreate(tmp);
         await create.ExecuteNonQueryAsync();
@@ -139,7 +140,7 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
     public async Task BuildRetrieveListById()
     {
         await BuildTestTable();
-        string s = Guid.NewGuid().ToString();
+        var s = Guid.NewGuid().ToString();
         var tmp = new TestEntity { Name = s };
         var create = entityHelper.BuildCreate(tmp);
         await create.ExecuteNonQueryAsync();
@@ -149,7 +150,7 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
         var listOfIds = list.Select(x => x.Id).ToList();
 
         var r = entityHelper.BuildRetrieve(listOfIds, null);
-        var r2 =(await entityHelper.LoadListAsync(r));
+        var r2 = (await entityHelper.LoadListAsync(r));
 
         Assert.True(listOfIds.Count > 0 && r2.Count == listOfIds.Count);
     }
@@ -158,7 +159,7 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
     public async Task BuildRetrieveListByObject()
     {
         await BuildTestTable();
-        string s = Guid.NewGuid().ToString();
+        var s = Guid.NewGuid().ToString();
         var tmp = new TestEntity { Name = s };
         var create = entityHelper.BuildCreate(tmp);
         await create.ExecuteNonQueryAsync();

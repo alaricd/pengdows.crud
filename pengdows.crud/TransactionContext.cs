@@ -2,6 +2,8 @@
 
 using System.Data;
 using System.Data.Common;
+using pengdows.crud.enums;
+using pengdows.crud.threading;
 using pengdows.crud.wrappers;
 
 #endregion
@@ -17,6 +19,8 @@ public class TransactionContext : ITransactionContext
     private long _disposed;
     private bool _isCompleted;
     private bool _rolledBack;
+
+    private readonly SemaphoreSlim _semaphoreSlim;
     public bool WasCommitted => _committed;
     public bool WasRolledBack => _rolledBack;
     public Guid TransactionId { get; } = Guid.NewGuid();
@@ -32,8 +36,13 @@ public class TransactionContext : ITransactionContext
 
         var executionType = GetExecutionAndSetIsolationTypes(ref isolationLevel);
         IsolationLevel = isolationLevel;
-        _connection = _context.GetConnection(executionType);
+        _connection = _context.GetConnection(executionType, true);
+        var locker = _connection.GetLock();
+        Console.WriteLine("--------Connection locker type for Transaction=" + locker.GetType());
         EnsureConnectionIsOpen();
+        _semaphoreSlim = new SemaphoreSlim(1, 1);
+
+
         _transaction = _connection.BeginTransaction(isolationLevel);
     }
 
@@ -89,10 +98,20 @@ public class TransactionContext : ITransactionContext
 
     public long MaxNumberOfConnections => _context.MaxNumberOfConnections;
 
+    public bool IsReadOnlyConnection => _context.IsReadOnlyConnection;
+
+    public ILockerAsync GetLock()
+    {
+        return new RealAsyncLocker(_semaphoreSlim);
+    }
+
     public ISqlContainer CreateSqlContainer(string? query = null)
     {
         if (IsCompleted)
+        {
             throw new Exception("Cannot create a sql container because this transaction is already completed.");
+        }
+
         return new SqlContainer(this, query);
     }
 
@@ -101,7 +120,7 @@ public class TransactionContext : ITransactionContext
         return _context.CreateDbParameter(name, type, value);
     }
 
-    public ITrackedConnection GetConnection(ExecutionType type)
+    public ITrackedConnection GetConnection(ExecutionType type, bool isShared = false)
     {
         return _connection;
     }
@@ -116,9 +135,9 @@ public class TransactionContext : ITransactionContext
         throw new InvalidOperationException("Cannot begin a transaction without an open connection.");
     }
 
-    public string GenerateRandomName(int length = 8)
+    public string GenerateRandomName(int length = 5, int parameterNameMaxLength = 30)
     {
-        return _context.GenerateRandomName(length);
+        return _context.GenerateRandomName(length, parameterNameMaxLength);
     }
 
     public DbParameter CreateDbParameter<T>(DbType type, T value)
@@ -172,7 +191,10 @@ public class TransactionContext : ITransactionContext
 
     public void Commit()
     {
-        if (IsCompleted) throw new InvalidOperationException("Transaction already completed.");
+        if (IsCompleted)
+        {
+            throw new InvalidOperationException("Transaction already completed.");
+        }
 
         try
         {
@@ -188,7 +210,10 @@ public class TransactionContext : ITransactionContext
 
     public void Rollback()
     {
-        if (IsCompleted) throw new InvalidOperationException("Transaction already completed.");
+        if (IsCompleted)
+        {
+            throw new InvalidOperationException("Transaction already completed.");
+        }
 
         try
         {
@@ -201,18 +226,93 @@ public class TransactionContext : ITransactionContext
             _context.CloseAndDisposeConnection(_connection);
         }
     }
+    
 
     public void Dispose()
     {
         Dispose(true);
+        GC.SuppressFinalize(this);
     }
 
-    private void EnsureConnectionIsOpen()
+    public async ValueTask DisposeAsync()
     {
-        if (_connection.State != ConnectionState.Open)
-            _connection.Open();
+        await DisposeAsyncCore().ConfigureAwait(false);
+        Dispose(false);
+        GC.SuppressFinalize(this);
     }
 
+    protected virtual void Dispose(bool disposing)
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return; // Already disposed
+
+        if (!_committed && !_rolledBack)
+        {
+            try
+            {
+                _transaction.Rollback();
+                _rolledBack = true;
+            }
+            catch
+            {
+                // Log or handle rollback failure if needed
+            }
+        }
+
+        if (disposing)
+        {
+            _transaction.Dispose();
+            _context.CloseAndDisposeConnection(_connection);
+            _semaphoreSlim.Dispose();
+        }
+
+        _isCompleted = true;
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return; // Already disposed
+
+        if (!_committed && !_rolledBack)
+        {
+            try
+            {
+                _transaction.Rollback();
+                _rolledBack = true;
+            }
+            catch
+            {
+                // Log or handle rollback failure asynchronously if required
+            }
+        }
+
+        if (_transaction is IAsyncDisposable asyncTransaction)
+        {
+            await asyncTransaction.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            _transaction.Dispose();
+        }
+
+        if (_connection is IAsyncDisposable asyncConnection)
+        {
+            await asyncConnection.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            _context.CloseAndDisposeConnection(_connection);
+        }
+
+        _semaphoreSlim.Dispose();
+        _isCompleted = true;
+    }
+
+    ~TransactionContext()
+    {
+        Dispose(false);
+    }
 
     private void ThrowIfDisposed()
     {
@@ -220,18 +320,10 @@ public class TransactionContext : ITransactionContext
             throw new ObjectDisposedException(nameof(TransactionContext));
     }
 
-    private void Dispose(bool disposing)
+    private void EnsureConnectionIsOpen()
     {
-        if (Interlocked.Increment(ref _disposed) == 1)
-        {
-            if (!_committed)
-            {
-                Rollback();
-            }
-
-            _context.CloseAndDisposeConnection(_connection);
-
-            if (disposing) GC.SuppressFinalize(this);
-        }
+        if (_connection.State != ConnectionState.Open)
+            _connection.Open();
     }
+    
 }

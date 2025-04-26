@@ -22,7 +22,7 @@ public interface ISqlContainer : IDisposable
     DbParameter AddParameterWithValue<T>(string? name, DbType type, T value);
     Task<int> ExecuteNonQueryAsync(CommandType commandType = CommandType.Text);
     Task<T?> ExecuteScalarAsync<T>(CommandType commandType = CommandType.Text);
-    Task<DbDataReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text);
+    Task<ITrackedReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text);
     void AddParameters(IEnumerable<DbParameter> list);
     void Dispose();
     DbCommand CreateCommand(ITrackedConnection conn);

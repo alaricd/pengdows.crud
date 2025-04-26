@@ -1,4 +1,4 @@
-namespace pengdows.crud;
+namespace pengdows.crud.enums;
 
 /// <summary>
 /// Specifies how connections should be managed within the DatabaseContext.

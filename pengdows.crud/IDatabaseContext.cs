@@ -2,13 +2,15 @@
 
 using System.Data;
 using System.Data.Common;
+using pengdows.crud.enums;
+using pengdows.crud.threading;
 using pengdows.crud.wrappers;
 
 #endregion
 
 namespace pengdows.crud;
 
-public interface IDatabaseContext : IDisposable
+public interface IDatabaseContext : IDisposable, IAsyncDisposable
 {
     DbMode ConnectionMode { get; }
     ITypeMapRegistry TypeMapRegistry { get; }
@@ -31,19 +33,23 @@ public interface IDatabaseContext : IDisposable
     bool PrepareStatements => DataSourceInfo.PrepareStatements;
     bool SupportsNamedParameters => DataSourceInfo.SupportsNamedParameters;
 
+    bool IsReadOnlyConnection { get; }
+
+    ILockerAsync GetLock();
+
     ISqlContainer CreateSqlContainer(string? query = null);
     DbParameter CreateDbParameter<T>(string name, DbType type, T value);
-    ITrackedConnection GetConnection(ExecutionType executionType);
+    ITrackedConnection GetConnection(ExecutionType executionType, bool isShared = false);
     string WrapObjectName(string name);
     TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null);
-    string GenerateRandomName(int length = 8);
+    string GenerateRandomName(int length = 5, int parameterNameMaxLength = 30);
     DbParameter CreateDbParameter<T>(DbType type, T value);
 
     void AssertIsReadConnection();
     void AssertIsWriteConnection();
-    
-   // void CloseAndDisposeConnection(DbConnection connection);
-   string MakeParameterName(DbParameter dbParameter);
-   string MakeParameterName(string parameterName);
+
+    // void CloseAndDisposeConnection(DbConnection connection);
+    string MakeParameterName(DbParameter dbParameter);
+    string MakeParameterName(string parameterName);
     void CloseAndDisposeConnection(ITrackedConnection? conn);
 }

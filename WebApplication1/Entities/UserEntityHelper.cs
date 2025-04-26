@@ -1,23 +1,26 @@
-using System.Data;
 using pengdows.crud;
 
 namespace WebApplication1;
 
-
 public class UserEntityHelper : EntityHelper<UserEntity, int>
 {
-    public UserEntityHelper(IDatabaseContext ctx, IAuditContextProvider<int> auditProvider)
-        : base(ctx, auditProvider) { }
-
-    public Task<UserEntity?> FindByEmail(string email)
+    public UserEntityHelper(IDatabaseContext ctx, IServiceProvider serviceProvider,
+        IAuditContextProvider<string> auditProvider)
+        : base(ctx, serviceProvider)
     {
-        return QuerySingleAsync(q =>
-        {
-            q.Query.Append("SELECT * FROM ");
-            q.Query.Append(q.WrapObjectName("Users"));
-            q.Query.Append(" WHERE ");
-            q.AddParameterWithValue("Email", DbType.String, email);
-            q.Query.Append("Email = " + q.Context.MakeParameterName("Email"));
-        });
+    }
+
+    public async Task<UserEntity?> FindByEmail(string email)
+    {
+        var list = new List<UserEntity>() { new() { Email = email } };
+        var sc = BuildRetrieve(list, "u");
+        var users = await LoadListAsync(sc);
+        return users.FirstOrDefault();
+    }
+
+    public async Task CreateAsync(UserEntity user)
+    {
+        var sc = BuildCreate(user);
+        await sc.ExecuteNonQueryAsync();
     }
 }

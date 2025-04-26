@@ -2,6 +2,7 @@
 
 using System.Data;
 using System.Text.RegularExpressions;
+using pengdows.crud.enums;
 using pengdows.crud.wrappers;
 
 #endregion

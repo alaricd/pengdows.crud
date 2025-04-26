@@ -2,13 +2,12 @@ using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 
 namespace testbed;
+
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using pengdows.crud;
 
-
-
-public class PostgreSqlTestContainer : TestContainer  
+public class PostgreSqlTestContainer : TestContainer
 {
     private readonly IContainer _container;
     private string? _connectionString;
@@ -19,7 +18,7 @@ public class PostgreSqlTestContainer : TestContainer
 
     public PostgreSqlTestContainer()
     {
-        _container = new  ContainerBuilder()
+        _container = new ContainerBuilder()
             .WithImage("postgres:latest")
             .WithEnvironment("POSTGRES_PASSWORD", _password)
             .WithEnvironment("POSTGRES_USER", _username)
@@ -35,7 +34,7 @@ public class PostgreSqlTestContainer : TestContainer
         var hostPort = _container.GetMappedPublicPort(_port);
         _connectionString =
             $@"Host=localhost;Port={hostPort};Username={_username};Password={_password};Database={_database};Pooling=true;Minimum Pool Size=1;Maximum Pool Size=20;Timeout=15;CommandTimeout=30;";
-        await WaitForDbToStart(NpgsqlFactory.Instance, _connectionString,_container);
+        await WaitForDbToStart(NpgsqlFactory.Instance, _connectionString, _container);
     }
 
     public override async Task<IDatabaseContext> GetDatabaseContextAsync(IServiceProvider services)

@@ -1,12 +1,10 @@
-using pengdows.crud;
-
 namespace WebApplication1;
 
 public class UserService
 {
-    private readonly IEntityHelper<UserEntity, int> _helper;
+    private readonly UserEntityHelper _helper;
 
-    public UserService(IEntityHelper<UserEntity, int> helper)
+    public UserService(UserEntityHelper helper)
     {
         _helper = helper;
     }

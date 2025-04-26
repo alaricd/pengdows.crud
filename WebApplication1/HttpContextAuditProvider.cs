@@ -1,6 +1,8 @@
+using pengdows.crud;
+
 namespace WebApplication1;
 
-public class HttpContextAuditProvider : IAuditContextProvider<int>
+public class HttpContextAuditProvider : AuditContextProvider<string>
 {
     private readonly IHttpContextAccessor _accessor;
 
@@ -8,8 +10,8 @@ public class HttpContextAuditProvider : IAuditContextProvider<int>
     {
         _accessor = accessor;
     }
-
-    public int GetCurrentUserId()
+    
+    public override string GetCurrentUserIdentifier()
     {
         var user = _accessor.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated != true)
@@ -17,6 +19,7 @@ public class HttpContextAuditProvider : IAuditContextProvider<int>
             throw new InvalidOperationException("User not authenticated.");
         }
 
-        return int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        //return int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        return user?.Identity?.Name ?? "Unknown";
     }
 }

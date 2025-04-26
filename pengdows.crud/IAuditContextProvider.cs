@@ -1,7 +1,7 @@
 namespace pengdows.crud;
 
-public interface IAuditContextProvider<T>
+public interface IAuditContextProvider<TUserId>
 {
-    T GetCurrentUserIdentifier();
+    TUserId GetCurrentUserIdentifier();
     DateTime GetUtcNow(); // for testability
 }

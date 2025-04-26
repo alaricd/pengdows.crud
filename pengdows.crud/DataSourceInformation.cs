@@ -3,6 +3,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Text.RegularExpressions;
+using pengdows.crud.enums;
 using pengdows.crud.wrappers;
 
 #endregion
@@ -14,7 +15,7 @@ public class DataSourceInformation : IDataSourceInformation
     private readonly bool? _supportsNamedParameters;
 
     public DataSourceInformation(IDbConnection connection)
-       : this(new TrackedConnection(connection as DbConnection))
+        : this(new TrackedConnection(connection as DbConnection))
     {
     }
 
@@ -291,7 +292,7 @@ public class DataSourceInformation : IDataSourceInformation
         //we are now setting session settings in maria/mysql to use doublequotes for identifiers
         //and apostrophes for string literals, like standard sql databases.
         //MS-sql is also getting QUOTED_IDENTIFIERS set to ON  in CheckForSqlServerSettings
-        QuotePrefix = QuoteSuffix = "\"";  
+        QuotePrefix = QuoteSuffix = "\"";
     }
 
     private T GetColumnValue<T>(DataRow row, string columnName, T defaultValue = default)
@@ -299,7 +300,11 @@ public class DataSourceInformation : IDataSourceInformation
         try
         {
             var value = row[columnName];
-            if (Utils.IsNullOrDbNull(value)) return defaultValue;
+            if (Utils.IsNullOrDbNull(value))
+            {
+                return defaultValue;
+            }
+
             return (T)Convert.ChangeType(value, typeof(T));
         }
         catch
@@ -350,5 +355,4 @@ public class DataSourceInformation : IDataSourceInformation
         SupportedDatabase.CockroachDb => true,
         _ => false // Others allow positional binding with arbitrary names
     };
-
 }

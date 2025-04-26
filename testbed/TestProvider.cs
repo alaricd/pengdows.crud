@@ -6,9 +6,7 @@ public class TestProvider : IAsyncTestProvider
 {
     private readonly IDatabaseContext _context;
     private readonly EntityHelper<TestTable, long> _helper;
-
-    private readonly Random _random = new();
-
+    
     public TestProvider(IDatabaseContext databaseContext, IServiceProvider serviceProvider)
     {
         _context = databaseContext;
@@ -18,7 +16,6 @@ public class TestProvider : IAsyncTestProvider
 
     public async Task RunTest()
     {
-        _random.Next();
         Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.Product.ToString());
         try
         {
@@ -148,7 +145,7 @@ CREATE TABLE {0}test_table{1} (
         var name = ctx is TransactionContext ? NameEnum.Test2 : NameEnum.Test;
         var t = new TestTable
         {
-            Id = _random.Next(),
+            Id = Random.Shared.Next(),
             Name = name,
             Description = ctx.GenerateRandomName()
         };

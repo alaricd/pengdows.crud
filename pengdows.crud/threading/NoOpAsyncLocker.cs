@@ -4,7 +4,9 @@ internal sealed class NoOpAsyncLocker : ILockerAsync
 {
     public static readonly NoOpAsyncLocker Instance = new();
 
-    private NoOpAsyncLocker() { }
+    private NoOpAsyncLocker()
+    {
+    }
 
     public Task LockAsync() => Task.CompletedTask;
 

@@ -4,56 +4,61 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using pengdows.crud.threading;
 
 namespace pengdows.crud.wrappers;
 
 internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
 {
     private readonly DbConnection _connection;
-    private readonly Action<ConnectionState, ConnectionState>? _onStateChange;
+    private readonly StateChangeEventHandler? _onStateChange;
     private readonly Action<DbConnection>? _onFirstOpen;
     private readonly Action<DbConnection>? _onDispose;
-    private bool _wasOpened;
+    private readonly ILogger<TrackedConnection> _logger;
     private readonly string _name;
-    private ILogger<TrackedConnection> _logger;
+
+    private int _wasOpened;
+    private int _disposed;
+    private readonly bool _isSharedConnection;
+    private readonly SemaphoreSlim _semaphoreSlim;
+
 
     internal TrackedConnection(
         DbConnection conn,
-        Action<ConnectionState, ConnectionState>? onStateChange = null,
+        StateChangeEventHandler? onStateChange = null,
         Action<DbConnection>? onFirstOpen = null,
-        Action<DbConnection>? onDispose = null)
+        Action<DbConnection>? onDispose = null,
+        ILogger<TrackedConnection>? logger = null,
+        bool isSharedConnection = false
+    )
     {
         _connection = conn ?? throw new ArgumentNullException(nameof(conn));
         _onStateChange = onStateChange;
         _onFirstOpen = onFirstOpen;
         _onDispose = onDispose;
+        _logger = logger ?? NullLogger<TrackedConnection>.Instance;
         _name = Guid.NewGuid().ToString();
-        _logger = new NullLogger<TrackedConnection>();
+        if (isSharedConnection)
+        {
+            _isSharedConnection = true;
+            _semaphoreSlim = new SemaphoreSlim(1, 1);
+        }
+        
+        if (_onStateChange != null)
+        {
+            _connection.StateChange += _onStateChange;
+        }
     }
 
     private void TriggerFirstOpen()
     {
-        if (!_wasOpened)
+        if (Interlocked.Exchange(ref _wasOpened, 1) == 0)
         {
-            _wasOpened = true;
             _onFirstOpen?.Invoke(_connection);
         }
     }
 
-    public IDbTransaction BeginTransaction()
-        => _connection.BeginTransaction();
-
-    public IDbTransaction BeginTransaction(IsolationLevel isolationLevel)
-        => _connection.BeginTransaction(isolationLevel);
-
-    public void ChangeDatabase(string databaseName)
-        => throw new NotImplementedException("This method is not allowed.");
-
-    public void Close()
-        => _connection.Close();
-
-    public IDbCommand CreateCommand()
-        => _connection.CreateCommand();
+    public bool WasOpened => Interlocked.CompareExchange(ref _wasOpened, 0, 0) == 1;
 
     public void Open()
     {
@@ -66,7 +71,7 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
         finally
         {
             stopwatch.Stop();
-            _logger?.LogInformation("Connection opened in {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
+            _logger.LogInformation("Connection opened in {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
         }
 
         TriggerFirstOpen();
@@ -83,11 +88,87 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
         finally
         {
             stopwatch.Stop();
-            _logger?.LogInformation("Connection opened in {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
+            _logger.LogInformation("Connection opened in {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
         }
 
         TriggerFirstOpen();
     }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _logger.LogDebug("Disposing connection {Name}", _name);
+
+        try
+        {
+            if (_connection.State != ConnectionState.Closed)
+            {
+                _logger.LogWarning("Connection {Name} was still open during Dispose. Closing.", _name);
+                _connection.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while closing connection during Dispose.");
+        }
+
+        _onDispose?.Invoke(_connection);
+        _connection.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _logger.LogDebug("Async disposing connection {Name}", _name);
+
+        try
+        {
+            if (_connection.State != ConnectionState.Closed)
+            {
+                _logger.LogWarning("Connection {Name} was still open during DisposeAsync. Closing.", _name);
+                _connection?.Close(); // Safe sync close before async dispose
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while closing connection during DisposeAsync.");
+        }
+
+        _onDispose?.Invoke(_connection);
+        await _connection.DisposeAsync().ConfigureAwait(false);
+    }
+
+    public ILockerAsync GetLock()
+    {
+        return _isSharedConnection ? new RealAsyncLocker(_semaphoreSlim): NoOpAsyncLocker.Instance;
+    }
+
+    #region IDbConnection passthroughs
+
+    public IDbTransaction BeginTransaction() => _connection.BeginTransaction();
+
+    public IDbTransaction BeginTransaction(IsolationLevel isolationLevel) =>
+        _connection.BeginTransaction(isolationLevel);
+
+    public void ChangeDatabase(string databaseName) =>
+        throw new NotImplementedException("ChangeDatabase is not supported.");
+
+    public void Close() => _connection.Close();
+    public IDbCommand CreateCommand() => _connection.CreateCommand();
+    public string Database => _connection.Database;
+    public ConnectionState State => _connection.State;
+    public string DataSource => _connection.DataSource;
+    public string ServerVersion => _connection.ServerVersion;
+    public int ConnectionTimeout => _connection.ConnectionTimeout;
+    public DataTable GetSchema(string dataSourceInformation) => _connection.GetSchema(dataSourceInformation);
 
     [AllowNull]
     public string ConnectionString
@@ -96,24 +177,5 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
         set => _connection.ConnectionString = value;
     }
 
-    public int ConnectionTimeout => _connection.ConnectionTimeout;
-    public string Database => _connection.Database;
-    public ConnectionState State => _connection.State;
-    public string DataSource => _connection.DataSource;
-    public string ServerVersion => _connection.ServerVersion;
-
-    public DataTable GetSchema(string dataSourceInformation)
-        => _connection.GetSchema(dataSourceInformation);
-
-    public void Dispose()
-    {
-        _onDispose?.Invoke(_connection);
-        _connection.Dispose();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        _onDispose?.Invoke(_connection);
-        await _connection.DisposeAsync().ConfigureAwait(false);
-    }
+    #endregion
 }

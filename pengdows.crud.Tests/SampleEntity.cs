@@ -1,5 +1,6 @@
 using System.Data;
 using pengdows.crud.attributes;
+using pengdows.crud.enums;
 
 namespace pengdows.crud.Tests;
 

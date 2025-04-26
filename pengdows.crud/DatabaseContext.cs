@@ -5,7 +5,9 @@ using System.Data.Common;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using pengdows.crud.enums;
 using pengdows.crud.exceptions;
+using pengdows.crud.threading;
 using pengdows.crud.wrappers;
 
 #endregion
@@ -14,7 +16,6 @@ namespace pengdows.crud;
 
 public class DatabaseContext : IDatabaseContext
 {
-    private static readonly Random _random = new();
     private readonly DbProviderFactory _factory;
     private readonly ILogger<IDatabaseContext> _logger;
     private bool _applyConnectionSessionSettings;
@@ -43,6 +44,13 @@ public class DatabaseContext : IDatabaseContext
         _factory = factory;
         _logger = logger ?? NullLogger<IDatabaseContext>.Instance;
         InitializeInternals(connectionString, mode, readWriteMode);
+    }
+
+    public bool IsReadOnlyConnection => _isReadConnection && !_isWriteConnection;
+
+    public ILockerAsync GetLock()
+    {
+        return NoOpAsyncLocker.Instance;
     }
 
     public string Name { get; set; }
@@ -99,7 +107,7 @@ public class DatabaseContext : IDatabaseContext
         return sb.ToString();
     }
 
-    private ITrackedConnection FactoryCreateConnection(string? connectionString = null)
+    private ITrackedConnection FactoryCreateConnection(string? connectionString = null, bool isSharedConnection = false)
     {
         SanitizeConnectionString(connectionString);
 
@@ -108,8 +116,10 @@ public class DatabaseContext : IDatabaseContext
 
         var tracked = new TrackedConnection(
             connection,
-            (from, to) => //StateChangeHandler
+            (sender, args) => //StateChangeHandler
             {
+                var to = args.CurrentState;
+                var from = args.OriginalState;
                 switch (to)
                 {
                     case ConnectionState.Open:
@@ -127,7 +137,10 @@ public class DatabaseContext : IDatabaseContext
                 }
             },
             onFirstOpen: ApplyConnectionSessionSettings,
-            onDispose: conn => { _logger.LogDebug("Connection disposed."); });
+            onDispose: conn => { _logger.LogDebug("Connection disposed."); },
+            null,
+            isSharedConnection
+        );
         return tracked;
     }
 
@@ -136,7 +149,7 @@ public class DatabaseContext : IDatabaseContext
         if (connectionString != null && string.IsNullOrWhiteSpace(ConnectionString))
         {
             //"Multiple Active Record Sets"
-            var csb = GetFactoryConnectionStringBuilder(connectionString); 
+            var csb = GetFactoryConnectionStringBuilder(connectionString);
             var tmp = csb.ConnectionString;
             this.ConnectionString = tmp;
         }
@@ -203,13 +216,13 @@ public class DatabaseContext : IDatabaseContext
     }
 
 
-    public ITrackedConnection GetConnection(ExecutionType executionType)
+    public ITrackedConnection GetConnection(ExecutionType executionType, bool isShared = false)
     {
         switch (ConnectionMode)
         {
             case DbMode.Standard:
             case DbMode.KeepAlive:
-                return GetStandardConnection();
+                return GetStandardConnection(isShared);
             case DbMode.SingleWriter:
                 return GetSingleWriterConnection(executionType);
             case DbMode.SingleConnection:
@@ -219,47 +232,24 @@ public class DatabaseContext : IDatabaseContext
         }
     }
 
-    public string GenerateRandomName(int length = 8)
+    public string GenerateRandomName(int length = 5, int parameterNameMaxLength = 30)
     {
         var validchars = "abcdefghijklmnopqrstuvwuxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890_".ToCharArray();
+        var len = Math.Min(Math.Max(length, 2), parameterNameMaxLength);
 
-        // If the desired length exceeds the max allowed length, adjust to max length
-        var dsi = _dataSourceInfo;
-        var len = Math.Max(length, 2);
-        len = Math.Min(len, dsi.ParameterNameMaxLength);
-        // Create a buffer to store random bytes
-        var buffer = new byte[len];
+        Span<char> buffer = stackalloc char[len];
+        var firstCharMax = 52; // a-zA-Z
+        var anyOtherMax = validchars.Length;
 
-        // StringBuilder to construct the final random name
-        var ca = new StringBuilder();
-
-        // Generate random bytes and append corresponding lowercase letters to StringBuilder
-        _random.NextBytes(buffer);
-        var i = 0;
-        var x = validchars.Length;
-        foreach (var b in buffer)
+        buffer[0] = validchars[Random.Shared.Next(firstCharMax)];
+        for (var i = 1; i < len; i++)
         {
-            // Convert each byte to a letter in validchars array
-            // enforcing the fist letter into the 'a' to 'z' range
-            var mod = x;
-            if (i++ == 0) mod = 52;
-
-            ca.Append(validchars[b % mod]);
+            buffer[i] = validchars[Random.Shared.Next(anyOtherMax)];
         }
 
-        // Get the generated name as a string
-        var generatedName = ca.ToString();
-
-        // Validate the generated name using the ParameterNamePattern regex
-        if (!dsi.ParameterNamePatternRegex.IsMatch(generatedName))
-        {
-            _logger.LogInformation(generatedName);
-            // If the name is not valid, regenerate a new one
-            return GenerateRandomName(len);
-        }
-
-        return generatedName;
+        return new string(buffer);
     }
+
 
     public DbParameter CreateDbParameter<T>(DbType type, T value)
     {
@@ -279,7 +269,10 @@ public class DatabaseContext : IDatabaseContext
 
     public void CloseAndDisposeConnection(ITrackedConnection? connection)
     {
-        if (connection == null) return;
+        if (connection == null)
+        {
+            return;
+        }
 
         _logger.LogInformation($"Connection mode is: {ConnectionMode}");
         switch (ConnectionMode)
@@ -409,8 +402,9 @@ public class DatabaseContext : IDatabaseContext
         {
             _isReadConnection = (readWriteMode & ReadWriteMode.ReadOnly) == ReadWriteMode.ReadOnly;
             _isWriteConnection = (readWriteMode & ReadWriteMode.WriteOnly) == ReadWriteMode.WriteOnly;
-            conn = FactoryCreateConnection(connectionString);
-
+            // this connection will be set as our single connection for any DbMode != DbMode.Standard
+            // so we set it to shared.
+            conn = FactoryCreateConnection(connectionString, true);
             try
             {
                 conn.Open();
@@ -463,13 +457,9 @@ public class DatabaseContext : IDatabaseContext
 
     private DbConnectionStringBuilder GetFactoryConnectionStringBuilder(string connectionString)
     {
-        if (_csb == null)
-        {
-            _csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
-            _csb.ConnectionString = connectionString;
-        }
-
-        return _csb;
+        var csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
+        csb.ConnectionString = string.IsNullOrEmpty(connectionString) ? _connectionString : connectionString;
+        return csb;
     }
 
     private void SetupConnectionSessionSettingsForProvider(ITrackedConnection conn)
@@ -512,12 +502,12 @@ public class DatabaseContext : IDatabaseContext
                 // has to be done in connection string, not session;
                 break;
 
-                //DB 2 can't be supported under modern .net 
+            //DB 2 can't be supported under modern .net 
 //             case SupportedDatabase.Db2:
 //                 _connectionSessionSettings = @"
 //                  SET CURRENT DEGREE = 'ANY';
 // ";
-                break;
+//                break;
 
             default:
                 _connectionSessionSettings = string.Empty;
@@ -528,17 +518,11 @@ public class DatabaseContext : IDatabaseContext
     }
 
 
-    private ITrackedConnection GetStandardConnection()
-    {
-        var conn = FactoryCreateConnection();
-        return conn;
-    }
-
-
     private void ApplyConnectionSessionSettings(IDbConnection connection)
     {
         _logger.LogInformation("Applying connection session settings");
         if (_applyConnectionSessionSettings)
+        {
             try
             {
                 using var cmd = connection.CreateCommand();
@@ -550,31 +534,68 @@ public class DatabaseContext : IDatabaseContext
                 _logger.LogError("Error setting session settings:" + ex.Message);
                 _applyConnectionSessionSettings = false;
             }
+        }
     }
+
+    private ITrackedConnection GetStandardConnection(bool isShared = false)
+    {
+        var conn = FactoryCreateConnection(null, isShared);
+        return conn;
+    }
+
 
     private ITrackedConnection GetSingleConnection()
     {
         return Connection;
     }
 
-    private ITrackedConnection GetSingleWriterConnection(ExecutionType type)
+    private ITrackedConnection GetSingleWriterConnection(ExecutionType type, bool isShared = false)
     {
         if (ExecutionType.Read == type)
         {
-            return GetStandardConnection();
+            return GetStandardConnection(isShared);
         }
 
-        return Connection;
+        return GetSingleConnection();
     }
 
-    private int _disposed;
-    private DbConnectionStringBuilder _csb;
+    private int _disposed; // 0=false, 1=true
 
     public void Dispose()
     {
-        Dispose(true);
+        Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeAsyncCore().ConfigureAwait(false);
+        Dispose(disposing: false);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return; // Already disposed
+
+        if (_connection is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            _connection?.Dispose();
+        }
+
+        _connection = null;
+    }
+
+    ~DatabaseContext()
+    {
+        Dispose(disposing: false);
+    }
+
 
     protected virtual void Dispose(bool disposing)
     {
@@ -585,16 +606,21 @@ public class DatabaseContext : IDatabaseContext
 
         if (disposing)
         {
-            _connection?.Close();
-            _connection?.Dispose();
-            _connection = null;
+            try
+            {
+                _connection?.Close();
+                _connection?.Dispose();
+            }
+            catch
+            {
+                //
+            }
+            finally
+            {
+                _connection = null;
+            }
         }
 
         // unmanaged cleanup if needed
-    }
-
-    ~DatabaseContext()
-    {
-        Dispose(false);
     }
 }
