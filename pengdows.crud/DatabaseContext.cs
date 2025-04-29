@@ -31,18 +31,21 @@ public class DatabaseContext : IDatabaseContext
     private string _connectionString;
     public ReadWriteMode ReadWriteMode { get; }
 
-    public DatabaseContext(string connectionString,
+    public DatabaseContext(
+        string connectionString,
         DbProviderFactory factory,
-        ITypeMapRegistry typeMapRegistry = null,
+        ITypeMapRegistry? typeMapRegistry = null,
         DbMode mode = DbMode.Standard,
         ReadWriteMode readWriteMode = ReadWriteMode.ReadWrite,
-        ILogger<IDatabaseContext> logger = null)
+        ILoggerFactory? loggerFactory = null
+    )
     {
+        loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         ReadWriteMode = readWriteMode;
         TypeMapRegistry = typeMapRegistry ?? new TypeMapRegistry();
         ConnectionMode = mode;
         _factory = factory;
-        _logger = logger ?? NullLogger<IDatabaseContext>.Instance;
+        _logger = loggerFactory?.CreateLogger<IDatabaseContext>() ?? NullLogger<IDatabaseContext>.Instance;
         InitializeInternals(connectionString, mode, readWriteMode);
     }
 
@@ -194,7 +197,7 @@ public class DatabaseContext : IDatabaseContext
         return new SqlContainer(this, query);
     }
 
-    public DbParameter CreateDbParameter<T>(string name, DbType type, T value)
+    public DbParameter CreateDbParameter<T>(string? name, DbType type, T value)
     {
         var p = _factory.CreateParameter() ?? throw new InvalidOperationException("Failed to create parameter.");
 
@@ -232,19 +235,20 @@ public class DatabaseContext : IDatabaseContext
         }
     }
 
+
     public string GenerateRandomName(int length = 5, int parameterNameMaxLength = 30)
     {
-        var validchars = "abcdefghijklmnopqrstuvwuxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890_".ToCharArray();
+        var validChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".ToCharArray();
         var len = Math.Min(Math.Max(length, 2), parameterNameMaxLength);
 
         Span<char> buffer = stackalloc char[len];
-        var firstCharMax = 52; // a-zA-Z
-        var anyOtherMax = validchars.Length;
+        const int firstCharMax = 52; // a-zA-Z
+        var anyOtherMax = validChars.Length;
 
-        buffer[0] = validchars[Random.Shared.Next(firstCharMax)];
+        buffer[0] = validChars[Random.Shared.Next(firstCharMax)];
         for (var i = 1; i < len; i++)
         {
-            buffer[i] = validchars[Random.Shared.Next(anyOtherMax)];
+            buffer[i] = validChars[Random.Shared.Next(anyOtherMax)];
         }
 
         return new string(buffer);
@@ -258,12 +262,35 @@ public class DatabaseContext : IDatabaseContext
 
     public void AssertIsReadConnection()
     {
-        if (!_isReadConnection) throw new InvalidOperationException("The connection is not read connection.");
+        if (!_isReadConnection)
+        {
+            throw new InvalidOperationException("The connection is not read connection.");
+        }
     }
 
     public void AssertIsWriteConnection()
     {
-        if (!_isWriteConnection) throw new InvalidOperationException("The connection is not write connection.");
+        if (!_isWriteConnection)
+        {
+            throw new InvalidOperationException("The connection is not write connection.");
+        }
+    }
+
+    public async ValueTask CloseAndDisposeConnectionAsync(ITrackedConnection? connection)
+    {
+        if (connection == null)
+            return;
+
+        _logger.LogInformation($"Async Closing Connection in mode: {ConnectionMode}");
+
+        if (connection is IAsyncDisposable asyncConnection)
+        {
+            await asyncConnection.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            connection.Dispose();
+        }
     }
 
 
@@ -292,7 +319,6 @@ public class DatabaseContext : IDatabaseContext
                 _logger.LogInformation("Closing a standard connection");
                 try
                 {
-                    connection.Close();
                     connection.Dispose();
                 }
                 catch
@@ -386,7 +412,10 @@ public class DatabaseContext : IDatabaseContext
             recorded.TryGetValue(expectedKvp.Key, out var result);
             if (result != expectedKvp.Value)
             {
-                if (sb.Length > 0) sb.AppendLine();
+                if (sb.Length > 0)
+                {
+                    sb.AppendLine();
+                }
 
                 sb.Append($"SET {expectedKvp.Key} {expectedKvp.Value}");
             }
@@ -423,7 +452,6 @@ public class DatabaseContext : IDatabaseContext
                 // ":memory:" needs a persistent connection to avoid data loss
                 // file-based SQLite requires a single writer to avoid lock conflicts
                 var csb = GetFactoryConnectionStringBuilder(String.Empty);
-                //csb.ConnectionString = connectionString;
                 var ds = csb["Data Source"] as string;
                 ConnectionMode = ":memory:" == ds
                     ? DbMode.SingleConnection
@@ -489,8 +517,8 @@ public class DatabaseContext : IDatabaseContext
             case SupportedDatabase.Oracle:
                 _connectionSessionSettings = @"
                 ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD';
-                ALTER SESSION SET CURRENT_SCHEMA = your_schema;
 ";
+//                ALTER SESSION SET CURRENT_SCHEMA = your_schema;
                 break;
 
             case SupportedDatabase.Sqlite:
@@ -564,14 +592,12 @@ public class DatabaseContext : IDatabaseContext
     public void Dispose()
     {
         Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 
     public async ValueTask DisposeAsync()
     {
         await DisposeAsyncCore().ConfigureAwait(false);
-        Dispose(disposing: false);
-        GC.SuppressFinalize(this);
+        Dispose(disposing: false); // Finalizer path for unmanaged cleanup (if any)
     }
 
     protected virtual async ValueTask DisposeAsyncCore()
@@ -591,6 +617,7 @@ public class DatabaseContext : IDatabaseContext
         _connection = null;
     }
 
+
     ~DatabaseContext()
     {
         Dispose(disposing: false);
@@ -600,27 +627,25 @@ public class DatabaseContext : IDatabaseContext
     protected virtual void Dispose(bool disposing)
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
-            return;
-        }
+            return; // Already disposed
 
         if (disposing)
         {
             try
             {
-                _connection?.Close();
                 _connection?.Dispose();
             }
             catch
             {
-                //
+                // Optional: log or suppress
             }
             finally
             {
                 _connection = null;
+                GC.SuppressFinalize(this); // Suppress only here
             }
         }
 
-        // unmanaged cleanup if needed
+        // unmanaged cleanup if needed (none currently)
     }
 }

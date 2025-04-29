@@ -20,7 +20,7 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
     private int _wasOpened;
     private int _disposed;
     private readonly bool _isSharedConnection;
-    private readonly SemaphoreSlim _semaphoreSlim;
+    private readonly SemaphoreSlim? _semaphoreSlim;
 
 
     internal TrackedConnection(
@@ -43,7 +43,7 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
             _isSharedConnection = true;
             _semaphoreSlim = new SemaphoreSlim(1, 1);
         }
-        
+
         if (_onStateChange != null)
         {
             _connection.StateChange += _onStateChange;
@@ -97,9 +97,7 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
             return;
-        }
 
         _logger.LogDebug("Disposing connection {Name}", _name);
 
@@ -118,37 +116,46 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
 
         _onDispose?.Invoke(_connection);
         _connection.Dispose();
+
+        GC.SuppressFinalize(this); // Add this here
     }
 
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
             return;
-        }
 
         _logger.LogDebug("Async disposing connection {Name}", _name);
+
+        if (_isSharedConnection)
+        {
+            await _semaphoreSlim.WaitAsync().ConfigureAwait(false);
+        }
 
         try
         {
             if (_connection.State != ConnectionState.Closed)
             {
                 _logger.LogWarning("Connection {Name} was still open during DisposeAsync. Closing.", _name);
-                _connection?.Close(); // Safe sync close before async dispose
+                _connection.Close(); // Safe sync close
+            }
+
+            _onDispose?.Invoke(_connection);
+            await _connection.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            if (_isSharedConnection)
+            {
+                _semaphoreSlim.Release();
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error while closing connection during DisposeAsync.");
-        }
-
-        _onDispose?.Invoke(_connection);
-        await _connection.DisposeAsync().ConfigureAwait(false);
     }
+
 
     public ILockerAsync GetLock()
     {
-        return _isSharedConnection ? new RealAsyncLocker(_semaphoreSlim): NoOpAsyncLocker.Instance;
+        return _isSharedConnection ? new RealAsyncLocker(_semaphoreSlim) : NoOpAsyncLocker.Instance;
     }
 
     #region IDbConnection passthroughs

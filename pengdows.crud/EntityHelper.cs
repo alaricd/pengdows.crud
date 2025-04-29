@@ -21,10 +21,8 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
     private static readonly ConcurrentDictionary<PropertyInfo, Action<object, object?>> _propertySetters = new();
     private readonly IDatabaseContext _context;
     private readonly ColumnInfo? _idColumn;
-    private readonly string _parameterMarker;
     private readonly IServiceProvider _serviceProvider;
     private readonly TableInfo _tableInfo;
-    private readonly bool _usePositionalParameters;
 
     private readonly ColumnInfo? _versionColumn;
     private readonly Type? _userFieldType = null;
@@ -51,12 +49,9 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
             _userFieldType = propertyInfoPropertyType;
         }
 
-        _parameterMarker = _context.DataSourceInfo.ParameterMarker;
-        _usePositionalParameters = _context.DataSourceInfo.ParameterMarker == "?";
-
         WrappedTableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
                                ? WrapObjectName(_tableInfo.Schema) +
-                                 _context.DataSourceInfo.CompositeIdentifierSeparator
+                                 _context.CompositeIdentifierSeparator
                                : "")
                            + WrapObjectName(_tableInfo.Name);
         _idColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsId);
@@ -168,7 +163,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
         var columns = new StringBuilder();
         var values = new StringBuilder();
         var parameters = new List<DbParameter>();
-        var pid = 0;
+
         var sc = ctx.CreateSqlContainer();
         SetAuditFields(objectToCreate, false);
         foreach (var column in _tableInfo.Columns.Values)
@@ -181,9 +176,8 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
                 values.Append(", ");
             }
 
-            var paramName = $"p{pid++}";
             var value = column.MakeParameterValueFromField(objectToCreate);
-            var p = _context.CreateDbParameter(paramName,
+            var p = _context.CreateDbParameter(
                 column.DbType,
                 value
             );
@@ -218,7 +212,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
         var wrappedAlias = "";
         if (!string.IsNullOrWhiteSpace(alias))
             wrappedAlias = WrapObjectName(alias) +
-                           _context.DataSourceInfo.CompositeIdentifierSeparator;
+                           _context.CompositeIdentifierSeparator;
         var ctx = context ?? _context;
         var sc = ctx.CreateSqlContainer();
         var sb = sc.Query;
@@ -229,7 +223,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
         sb.Append("\nFROM ").Append(WrappedTableName);
         if (wrappedAlias.Length > 0)
         {
-            sb.Append(" " + wrappedAlias.Substring(0, wrappedAlias.Length - 1));
+            sb.Append($" {wrappedAlias.Substring(0, wrappedAlias.Length - 1)}");
         }
 
         return sc;
@@ -242,8 +236,10 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
         var sc = BuildBaseRetrieve(alias, ctx);
         var wrappedAlias = "";
         if (!string.IsNullOrWhiteSpace(alias))
+        {
             wrappedAlias = WrapObjectName(alias) +
-                           _context.DataSourceInfo.CompositeIdentifierSeparator;
+                           _context.CompositeIdentifierSeparator;
+        }
 
         var wrappedColumnName = wrappedAlias +
                                 WrapObjectName(_idColumn.Name);
@@ -264,7 +260,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
         var wrappedAlias = "";
         if (!string.IsNullOrWhiteSpace(alias))
             wrappedAlias = WrapObjectName(alias) +
-                           _context.DataSourceInfo.CompositeIdentifierSeparator;
+                           _context.CompositeIdentifierSeparator;
 
         var wrappedColumnName = wrappedAlias +
                                 WrapObjectName(_idColumn.Name);
@@ -283,7 +279,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
     public ISqlContainer BuildRetrieve(IReadOnlyCollection<TEntity>? listOfObjects = null,
         IDatabaseContext? context = null)
     {
-        return BuildRetrieve(listOfObjects, null, context);
+        return BuildRetrieve(listOfObjects, string.Empty, context);
     }
 
     public void BuildWhereByPrimaryKey(IReadOnlyCollection<TEntity>? listOfObjects, ISqlContainer sc, string alias = "")
@@ -301,7 +297,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
 
         // Calculate total parameter count to avoid exceeding DB limits
         var pc = sc.ParameterCount;
-        var numberOfParametersToBeAdded = listOfObjects.Count * listOfPrimaryKeys.Count;
+        var numberOfParametersToBeAdded = listOfObjects?.Count * listOfPrimaryKeys.Count;
         if ((pc + numberOfParametersToBeAdded) > _context.MaxParameterLimit)
         {
             throw new TooManyParametersException("Too many parameters", _context.MaxParameterLimit);
@@ -410,11 +406,17 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
 
         foreach (var column in _tableInfo.Columns.Values)
         {
-            if (column.IsId || column.IsVersion || column.IsNonUpdateable)
+            if (column.IsId
+                || column.IsVersion
+                || column.IsNonUpdateable
+                || column.IsCreatedBy
+                || column.IsCreatedOn)
                 //Skip columns that should never be directly updated
                 //the version column, rowId and columns we have marked 
-                //as non-updateable
+                //as non-updateable, also of course we should NEVER update "created" columns
+            {
                 continue;
+            }
 
             var newValue = column.MakeParameterValueFromField(objectToUpdate);
             var originalValue = loadOriginal ? column.MakeParameterValueFromField(original) : null;
@@ -431,22 +433,23 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
             }
             else
             {
-                var paramName = $"p{parameters.Count}";
-                var param = context.CreateDbParameter(paramName, column.DbType, newValue);
+                var param = context.CreateDbParameter(column.DbType, newValue);
                 parameters.Add(param);
                 setClause.Append($"{WrapObjectName(column.Name)} = {MakeParameterName(param)}");
             }
         }
 
         if (_versionColumn != null)
+        {
             //this should be updated to wrap other patterns.
             setClause.Append(
                 $", {WrapObjectName(_versionColumn.Name)} = {WrapObjectName(_versionColumn.Name)} + 1");
+        }
 
         if (setClause.Length == 0)
             throw new InvalidOperationException("No changes detected for update.");
 
-        var pId = context.CreateDbParameter("pId", _idColumn!.DbType,
+        var pId = context.CreateDbParameter(_idColumn!.DbType,
             _idColumn.PropertyInfo.GetValue(objectToUpdate)!);
         parameters.Add(pId);
 
@@ -467,7 +470,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
             }
             else
             {
-                var pVersion = context.CreateDbParameter("pVersion", _versionColumn.DbType, versionValue);
+                var pVersion = context.CreateDbParameter(_versionColumn.DbType, versionValue);
                 sc.Query.Append(" AND ").Append(WrapObjectName(_versionColumn.Name))
                     .Append($" = {MakeParameterName(pVersion)}");
                 parameters.Add(pVersion);
@@ -487,7 +490,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
         if (idCol == null)
             throw new InvalidOperationException($"row identity column for table {WrappedTableName} not found");
 
-        var p = _context.CreateDbParameter("id", idCol.DbType, id);
+        var p = _context.CreateDbParameter(idCol.DbType, id);
         sc.AddParameter(p);
 
         sc.Query.Append("DELETE FROM ")
@@ -511,20 +514,22 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
     public ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TRowID> ids, ISqlContainer sqlContainer)
     {
         var enumerable = ids?.Distinct().ToList();
-        if (Utils.IsNullOrEmpty(enumerable)) return sqlContainer;
+        if (Utils.IsNullOrEmpty(enumerable))
+        {
+            return sqlContainer;
+        }
 
 
         var hasNull = enumerable.Any(v => Utils.IsNullOrDbNull(v));
         var sb = new StringBuilder();
         var dbType = _idColumn!.DbType;
-        var idx = 0;
         foreach (var id in enumerable)
         {
             if (!hasNull || !Utils.IsNullOrDbNull(id))
             {
                 if (sb.Length > 0) sb.Append(", ");
 
-                var p = sqlContainer.AddParameterWithValue($"p{idx++}", dbType, id);
+                var p = sqlContainer.AddParameterWithValue(dbType, id);
                 var name = MakeParameterName(p);
                 sb.Append(name);
             }
@@ -567,7 +572,8 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
             var currentValue = _tableInfo.CreatedBy.PropertyInfo.GetValue(obj);
             if (currentValue == null
                 || currentValue as string == string.Empty
-                || Utils.IsZeroNumeric(currentValue))
+                || Utils.IsZeroNumeric(currentValue)
+                || (currentValue is Guid guid && guid == Guid.Empty))
                 _tableInfo.CreatedBy.PropertyInfo.SetValue(obj, userId);
         }
 
@@ -583,132 +589,4 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
     {
         return _context.WrapObjectName(objectName);
     }
-    //
-    // public ISqlContainer BuildUpsert(T objectToUpsert, IDatabaseContext? context = null)
-    // {
-    //     var ctx = context ?? _context;
-    //     return _context.DataSourceInfo.Product
-    //         switch
-    //         {
-    //             SupportedDatabase.PostgreSql or SupportedDatabase.Sqlite or SupportedDatabase.CockroachDb =>
-    //                 BuildInsertOnConflictUpsert(objectToUpsert, ctx),
-    //
-    //             SupportedDatabase.MySql or SupportedDatabase.MariaDb =>
-    //                 BuildInsertOnDuplicateKeyUpsert(objectToUpsert, ctx),
-    //
-    //             SupportedDatabase.SqlServer or SupportedDatabase.Oracle or SupportedDatabase.Firebird =>
-    //                 BuildMergeUpsert(objectToUpsert, ctx),
-    //
-    //             _ => throw new NotSupportedException("UPSERT is not supported for this database.")
-    //         };
-    // }
-    //
-    // private ISqlContainer BuildInsertOnConflictUpsert(T obj, IDatabaseContext ctx)
-    // {
-    //     var sc = BuildInsertStatement(obj, ctx, out var updateClause, out var conflictColumn);
-    //
-    //     sc.Query.Append(" ON CONFLICT(")
-    //         .Append(WrapObjectName(conflictColumn.Name))
-    //         .Append(") DO UPDATE SET ")
-    //         .Append(updateClause);
-    //
-    //     return sc;
-    // }
-    //
-    // private ISqlContainer BuildInsertOnDuplicateKeyUpsert(T obj, IDatabaseContext ctx)
-    // {
-    //     var sc = BuildInsertStatement(obj, ctx, out var updateClause, out _);
-    //
-    //     sc.Query.Append(" ON DUPLICATE KEY UPDATE ")
-    //         .Append(updateClause);
-    //
-    //     return sc;
-    // }
-    //
-    // private ISqlContainer BuildMergeUpsert(T objectToUpsert, IDatabaseContext ctx)
-    // {
-    //     if (objectToUpsert == null)
-    //         throw new ArgumentNullException(nameof(objectToUpsert));
-    //     if (_idColumn == null)
-    //         throw new InvalidOperationException($"No ID column defined for type {typeof(T).Name}");
-    //
-    //     var sc = ctx.CreateSqlContainer();
-    //     var parameters = new List<DbParameter>();
-    //     var sourceAlias = WrapObjectName("source");
-    //     var targetAlias = WrapObjectName("target");
-    //
-    //     var insertColumns = new List<string>();
-    //     var sourceSelect = new List<string>();
-    //     var insertValues = new List<string>();
-    //     var updateAssignments = new List<string>();
-    //
-    //     int paramIndex = 0;
-    //
-    //     SetAuditFields(objectToUpsert, updateOnly: false);
-    //
-    //     foreach (var column in _tableInfo.Columns.Values)
-    //     {
-    //         if (column.IsId && !column.IsIdIsWritable) continue;
-    //
-    //         var value = column.MakeParameterValueFromField(objectToUpsert);
-    //         var param = ctx.CreateDbParameter($"p{paramIndex++}", column.DbType, value);
-    //         parameters.Add(param);
-    //
-    //         var wrappedCol = WrapObjectName(column.Name);
-    //         var paramRef = MakeParameterName(param);
-    //
-    //         insertColumns.Add(wrappedCol);
-    //         insertValues.Add($"{sourceAlias}.{wrappedCol}");
-    //         sourceSelect.Add($"{paramRef} AS {wrappedCol}");
-    //
-    //         if (!column.IsId && !column.IsVersion && !column.IsNonUpdateable)
-    //         {
-    //             updateAssignments.Add($"{targetAlias}.{wrappedCol} = {sourceAlias}.{wrappedCol}");
-    //         }
-    //     }
-    //
-    //     if (_versionColumn != null)
-    //     {
-    //         var versionCol = WrapObjectName(_versionColumn.Name);
-    //         updateAssignments.Add($"{targetAlias}.{versionCol} = {targetAlias}.{versionCol} + 1");
-    //     }
-    //
-    //     var idColName = WrapObjectName(_idColumn.Name);
-    //     var fromClause = _context.DataSourceInfo.Product switch
-    //     {
-    //         SupportedDatabase.Oracle => "FROM DUAL",
-    //         SupportedDatabase.Firebird => "FROM RDB$DATABASE",
-    //         SupportedDatabase.SqlServer => "FROM (SELECT 1 AS Dummy) AS dummy",
-    //         _ => throw new NotSupportedException("MERGE UPSERT not supported for this database.")
-    //     };
-    //
-    //     sc.Query.AppendLine("MERGE INTO ")
-    //         .Append(WrappedTableName).Append(" ").Append(targetAlias).AppendLine()
-    //         .Append("USING (SELECT ").Append(string.Join(", ", sourceSelect)).Append(" ")
-    //         .Append(fromClause).Append(") ").Append(sourceAlias).AppendLine()
-    //         .Append("ON (")
-    //         .Append($"{targetAlias}.{idColName} = {sourceAlias}.{idColName})").AppendLine()
-    //         .AppendLine("WHEN MATCHED THEN")
-    //         .Append("  UPDATE SET ").Append(string.Join(", ", updateAssignments)).AppendLine()
-    //         .AppendLine("WHEN NOT MATCHED THEN")
-    //         .Append("  INSERT (").Append(string.Join(", ", insertColumns)).Append(")").AppendLine()
-    //         .Append("  VALUES (").Append(string.Join(", ", insertValues)).Append(");");
-    //
-    //     sc.AddParameters(parameters);
-    //     return sc;
-    // }
-    //
-    // private string GetUpsertExcludedValue(ColumnInfo col)
-    // {
-    //     return _context.DataSourceInfo.Product switch
-    //     {
-    //         SupportedDatabase.PostgreSql or SupportedDatabase.Sqlite or SupportedDatabase.CockroachDb =>
-    //             $"excluded.{WrapObjectName(col.Name)}",
-    //
-    //         SupportedDatabase.MySql or SupportedDatabase.MariaDb =>
-    //             $"VALUES({WrapObjectName(col.Name)})",
-    //
-    //         _ => throw new NotSupportedException("Excluded values not supported for this database.")
-    //     };
-    // }
 }

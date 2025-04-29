@@ -38,7 +38,7 @@ public interface IDatabaseContext : IDisposable, IAsyncDisposable
     ILockerAsync GetLock();
 
     ISqlContainer CreateSqlContainer(string? query = null);
-    DbParameter CreateDbParameter<T>(string name, DbType type, T value);
+    DbParameter CreateDbParameter<T>(string? name, DbType type, T value);
     ITrackedConnection GetConnection(ExecutionType executionType, bool isShared = false);
     string WrapObjectName(string name);
     TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null);

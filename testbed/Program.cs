@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
 using testbed;
+using testbed.Cockroach;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddScoped<IAuditContextProvider<string>, StringAuditContextProvider>();
@@ -14,26 +15,28 @@ builder.Services.AddSingleton<ITypeMapRegistry, TypeMapRegistry>();
 
 var host = builder.Build();
 
-using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory.Instance,
-           host.Services.GetRequiredService<ITypeMapRegistry>()))
+await using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteFactory.Instance,
+                 host.Services.GetRequiredService<ITypeMapRegistry>()))
 {
     var lite = new TestProvider(liteDb, host.Services);
     await lite.RunTest();
     liteDb.Dispose();
-    
 }
 
-await using (var my = new MySqlTestContainer())
-{
-    await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
-}
+await using var cockroach = new CockroachDbTestContainer();
+await cockroach.RunTestWithContainerAsync(host.Services, (db, sp) => new CockroadDbTestProvider(db, sp));
 
-var maria = new MariaDbContainer();
-await maria.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
-var pg = new PostgreSqlTestContainer();
-await pg.RunTestWithContainerAsync<PostgreSQLTest>(host.Services, (db, sp) => new PostgreSQLTest(db, sp));
-var ms = new SqlServerTestContainer();
-await ms.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
+// await using (var my = new MySqlTestContainer())
+// {
+//     await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
+// }
+//
+// var maria = new MariaDbContainer();
+// await maria.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
+// var pg = new PostgreSqlTestContainer();
+// await pg.RunTestWithContainerAsync<PostgreSQLTest>(host.Services, (db, sp) => new PostgreSQLTest(db, sp));
+// var ms = new SqlServerTestContainer();
+// await ms.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
 // var o = new OracleTestContainer();
 // await o.RunTestWithContainerAsync<OracleTestProvider>(host.Services, (db, sp) => new OracleTestProvider(db, sp));
 // var oracleConnectionString = "User Id=system;Password=mysecurepassword; Data Source=localhost:51521/XEPDB1;";

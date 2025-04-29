@@ -28,6 +28,6 @@ public class TenantContextRegistry : ITenantContextRegistry
         var factory = _serviceProvider.GetKeyedService<DbProviderFactory>(tenantInfo.DatabaseType)
                       ?? throw new InvalidOperationException($"No factory registered for {tenantInfo.DatabaseType}");
 
-        return new DatabaseContext(tenantInfo.ConnectionString, factory);
+        return new DatabaseContext(tenantInfo.ConnectionString ,factory);
     }
 }

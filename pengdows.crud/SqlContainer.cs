@@ -17,17 +17,10 @@ public class SqlContainer : ISqlContainer
     private readonly IDatabaseContext _context;
 
     private readonly ILogger<ISqlContainer> _logger;
-    private readonly List<DbParameter> _parameters = new();
+    private readonly Dictionary<string, DbParameter> _parameters = new();
     private bool _disposed;
 
-    internal SqlContainer(IDatabaseContext context, ILogger<ISqlContainer> logger = null)
-    {
-        _context = context;
-        _logger = logger ?? NullLogger<ISqlContainer>.Instance;
-        Query = new StringBuilder("");
-    }
-
-    internal SqlContainer(IDatabaseContext context, string? query = "", ILogger<ISqlContainer> logger = null)
+    internal SqlContainer(IDatabaseContext context, string? query = "", ILogger<ISqlContainer>? logger = null)
     {
         _context = context;
         _logger = logger ?? NullLogger<ISqlContainer>.Instance;
@@ -48,10 +41,10 @@ public class SqlContainer : ISqlContainer
 
         if (string.IsNullOrEmpty(parameter.ParameterName))
         {
-            parameter.ParameterName = _context.GenerateRandomName();
+            parameter.ParameterName = this.GenerateRandomName();
         }
 
-        _parameters.Add(parameter);
+        _parameters.Add(parameter.ParameterName, parameter);
     }
 
     public DbParameter AddParameterWithValue<T>(DbType type, T value)
@@ -66,17 +59,29 @@ public class SqlContainer : ISqlContainer
 
     public DbParameter AddParameterWithValue<T>(string? name, DbType type, T value)
     {
-        name ??= _context.GenerateRandomName();
+        name ??= this.GenerateRandomName();
         var parameter = _context.CreateDbParameter(name, type, value);
-        _parameters.Add(parameter);
+        _parameters.Add(name, parameter);
         return parameter;
+    }
+
+    private string GenerateRandomName()
+    {
+        while (true)
+        {
+            var name = _context.GenerateRandomName();
+            if (!_parameters.ContainsKey(name))
+            {
+                return name;
+            }
+        }
     }
 
     public async Task<int> ExecuteNonQueryAsync(CommandType commandType = CommandType.Text)
     {
         _context.AssertIsWriteConnection();
-        ITrackedConnection conn = null;
-        DbCommand cmd = null;
+        ITrackedConnection? conn = null;
+        DbCommand? cmd = null;
         try
         {
             await using var contextLocker = _context.GetLock();
@@ -98,6 +103,7 @@ public class SqlContainer : ISqlContainer
     public async Task<T?> ExecuteScalarAsync<T>(CommandType commandType = CommandType.Text)
     {
         _context.AssertIsReadConnection();
+
         await using var reader = await ExecuteReaderAsync(commandType);
         if (await reader.ReadAsync().ConfigureAwait(false))
         {
@@ -106,7 +112,7 @@ public class SqlContainer : ISqlContainer
             return (T?)TypeCoercionHelper.Coerce(value, reader.GetFieldType(0), targetType);
         }
 
-        throw new Exception("No rows returned");
+        throw new InvalidOperationException("ExecuteScalarAsync expected at least one row but found none.");
     }
 
     public async Task<ITrackedReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text)
@@ -230,7 +236,7 @@ public class SqlContainer : ISqlContainer
             if (_context.SupportsNamedParameters)
             {
                 // Trust that dev has set correct names
-                return string.Join(", ", _parameters.Select(p => _context.MakeParameterName(p)));
+                return string.Join(", ", _parameters.Values.Select(p => _context.MakeParameterName(p)));
             }
 
             // Positional binding (e.g., SQLite, MySQL)
@@ -241,7 +247,15 @@ public class SqlContainer : ISqlContainer
 
     private DbCommand PrepareCommand(ITrackedConnection conn, CommandType commandType, ExecutionType executionType)
     {
-        if (commandType == CommandType.TableDirect) throw new NotSupportedException("TableDirect isn't supported.");
+        if (commandType == CommandType.TableDirect)
+        {
+            throw new NotSupportedException("TableDirect isn't supported.");
+        }
+
+        if (Query.Length == 0)
+        {
+            throw new InvalidOperationException("SQL query is empty.");
+        }
 
         OpenConnection(conn);
         var cmd = CreateCommand(conn);
@@ -254,9 +268,9 @@ public class SqlContainer : ISqlContainer
             throw new InvalidOperationException(
                 $"Query exceeds the maximum parameter limit of {_context.MaxParameterLimit} for {_context.DatabaseProductName}.");
 
-        if (_parameters.Count > 0)
+        foreach (var param in _parameters.Values)
         {
-            cmd.Parameters.AddRange(_parameters.ToArray());
+            cmd.Parameters.Add(param);
         }
 
         if (_context.PrepareStatements)

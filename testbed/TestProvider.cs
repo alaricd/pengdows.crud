@@ -16,7 +16,7 @@ public class TestProvider : IAsyncTestProvider
 
     public async Task RunTest()
     {
-        Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.Product.ToString());
+        Console.WriteLine("Completed testing of provider:" + _context.Product.ToString());
         try
         {
             Console.WriteLine("Running Create table");
@@ -39,7 +39,7 @@ public class TestProvider : IAsyncTestProvider
         }
         finally
         {
-            Console.WriteLine("Completed testing of provider:" + _context.DataSourceInfo.Product.ToString());
+            Console.WriteLine("Completed testing of provider:" + _context.Product.ToString());
         }
     }
 

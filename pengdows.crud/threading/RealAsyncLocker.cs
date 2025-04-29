@@ -13,14 +13,14 @@ internal sealed class RealAsyncLocker : ILockerAsync
 
     public async Task LockAsync()
     {
-        Console.WriteLine("Acquiring lock...");
+        //Console.WriteLine("Acquiring lock...");
         await _semaphore.WaitAsync().ConfigureAwait(false);
         _locked = true;
     }
 
     public ValueTask DisposeAsync()
     {
-        Console.WriteLine("Disposing real-async-locker");
+        //Console.WriteLine("Disposing real-async-locker");
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
             if (!_locked)
