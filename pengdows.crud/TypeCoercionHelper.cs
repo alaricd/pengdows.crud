@@ -1,5 +1,6 @@
 #region
 
+using System.Globalization;
 using System.Text.Json;
 using pengdows.crud.enums;
 
@@ -22,7 +23,7 @@ public static class TypeCoercionHelper
         if (dbFieldType == targetType)
             return value;
         // Enum coercion
-        if (columnInfo.EnumType != null)
+        if (columnInfo?.EnumType != null)
         {
             if (Enum.TryParse(columnInfo.EnumType, value.ToString(), true, out var result))
                 return result;
@@ -33,10 +34,12 @@ public static class TypeCoercionHelper
                     throw new ArgumentException($"Cannot convert value '{value}' to enum {columnInfo.EnumType}.");
 
                 case EnumParseFailureMode.SetNullAndLog:
-                    if (Nullable.GetUnderlyingType(targetType) == columnInfo.EnumType)
-                        return null;
-                    throw new ArgumentException(
-                        $"Cannot convert '{value}' to non-nullable enum {columnInfo.EnumType}.");
+                    Console.WriteLine($"Cannot convert '{value}' to non-nullable enum {columnInfo.EnumType}.");
+                    return null;
+                // if (Nullable.GetUnderlyingType(targetType) == columnInfo.EnumType)
+                //     return null;
+                // throw new ArgumentException(
+                //     $"Cannot convert '{value}' to non-nullable enum {columnInfo.EnumType}.");
 
                 case EnumParseFailureMode.SetDefaultValue:
                     return Enum.GetValues(columnInfo.EnumType).GetValue(0);
@@ -80,7 +83,17 @@ public static class TypeCoercionHelper
 
         // DateTime from string
         if (sourceType == typeof(string) && targetType == typeof(DateTime) && value is string s)
-            return DateTime.Parse(s);
+        {
+            try
+            {
+                return DateTime.Parse(s, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidCastException($"Cannot convert value '{value}' to type '{targetType}'.", ex);
+            }
+        }
 
         try
         {

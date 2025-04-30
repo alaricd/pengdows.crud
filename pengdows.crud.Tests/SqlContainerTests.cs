@@ -101,7 +101,7 @@ public class SqlContainerTests : SqlLiteContextTestBase
 
         container.Query.AppendFormat("SELECT {0}Name{1} FROM {0}Test{1} WHERE {0}Id{1} = 1", qp, qs);
 
-        await Assert.ThrowsAsync<Exception>(() => container.ExecuteScalarAsync<string>());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => container.ExecuteScalarAsync<string>());
         AssertProperNumberOfConnectionsForMode();
     }
 
