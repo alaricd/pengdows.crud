@@ -1,14 +1,33 @@
+using System;
+using pengdows.crud.enums;
 using Xunit;
 
 namespace pengdows.crud.Tests
 {
     public class DbModeTests
     {
-        [Fact]
-        public void PlaceholderTest()
+        [Theory]
+        [InlineData("KeepAlive", DbMode.KeepAlive)]
+        [InlineData("SingleConnection", DbMode.SingleConnection)]
+        [InlineData("SingleWriter", DbMode.SingleWriter)]
+        [InlineData("Standard", DbMode.Standard)]
+        public void EnumParse_ShouldReturnCorrectValue(string input, DbMode expected)
         {
-            // TODO: Implement tests for DbMode.cs
-            Assert.True(true);
+            var result = Enum.Parse<DbMode>(input, ignoreCase: true);
+            Assert.Equal(expected, result);
+        }
+        
+        [Fact]
+        public void DbModeEnumParse_InvalidValue_ShouldThrow()
+        {
+            Assert.Throws<ArgumentException>(() => Enum.Parse<DbMode>("NotADbMode"));
+        }
+        
+        [Fact]
+        public void DbMode_ShouldContainExpectedValues()
+        {
+            var names = Enum.GetNames(typeof(DbMode));
+            Assert.Equal(new[] {"Standard", "KeepAlive", "SingleWriter", "SingleConnection"}, names);
         }
     }
 }

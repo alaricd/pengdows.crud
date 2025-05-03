@@ -1,6 +1,6 @@
 namespace pengdows.crud.attributes;
 
-[AttributeUsage(AttributeTargets.Class)]
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class TableAttribute : Attribute
 {
     public TableAttribute(string name, string? schema = null)

@@ -1,3 +1,6 @@
+using System;
+using System.Reflection;
+using pengdows.crud.attributes;
 using Xunit;
 
 namespace pengdows.crud.Tests
@@ -5,10 +8,25 @@ namespace pengdows.crud.Tests
     public class CreatedOnAttributeTests
     {
         [Fact]
-        public void PlaceholderTest()
+        public void Should_OnlyBeAllowed_OnProperties()
         {
-            // TODO: Implement tests for CreatedOnAttribute.cs
-            Assert.True(true);
+            var usage = typeof(CreatedOnAttribute)
+                .GetCustomAttribute<AttributeUsageAttribute>();
+
+            Assert.NotNull(usage);
+            Assert.True(usage.ValidOn.HasFlag(AttributeTargets.Property));
+            Assert.False(usage.ValidOn.HasFlag(AttributeTargets.Class));
+            Assert.False(usage.AllowMultiple); // single use only
+            Assert.True(usage.Inherited);     
+        }
+        
+        [Fact]
+        public void CreatedAt_ShouldHave_CreatedOnAttribute()
+        {
+            var prop = typeof(TestTable).GetProperty("CreatedAt");
+
+            var attr = prop?.GetCustomAttribute<CreatedOnAttribute>();
+            Assert.NotNull(attr);
         }
     }
 }

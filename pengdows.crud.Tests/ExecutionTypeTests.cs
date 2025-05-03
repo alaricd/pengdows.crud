@@ -1,14 +1,31 @@
+using System;
+using pengdows.crud.enums;
 using Xunit;
 
 namespace pengdows.crud.Tests
 {
     public class ExecutionTypeTests
     {
-        [Fact]
-        public void PlaceholderTest()
+        [Theory]
+        [InlineData("Read", ExecutionType.Read)]
+        [InlineData("Write", ExecutionType.Write)]
+        public void EnumParse_ShouldReturnCorrectValue(string input, ExecutionType expected)
         {
-            // TODO: Implement tests for ExecutionType.cs
-            Assert.True(true);
+            var result = Enum.Parse<ExecutionType>(input, ignoreCase: true);
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void ExecutionTypeEnumParse_InvalidValue_ShouldThrow()
+        {
+            Assert.Throws<ArgumentException>(() => Enum.Parse<ExecutionType>("NotAnExecutionType"));
+        }
+
+        [Fact]
+        public void ExecutionType_ShouldContainExpectedValues()
+        {
+            var names = Enum.GetNames(typeof(ExecutionType));
+            Assert.Equal(new[] { "Read", "Write" }, names);
         }
     }
 }

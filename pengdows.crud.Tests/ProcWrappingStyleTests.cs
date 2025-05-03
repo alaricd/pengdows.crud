@@ -1,3 +1,4 @@
+using System;
 using System.Data;
 using Microsoft.Data.Sqlite;
 using pengdows.crud.enums;
@@ -9,11 +10,30 @@ namespace pengdows.crud.Tests
     {
         private DatabaseContext _dbContext;
 
-        [Fact]
-        public void PlaceholderTest()
+        [Theory]
+        [InlineData("Call", ProcWrappingStyle.Call)]
+        [InlineData("Exec", ProcWrappingStyle.Exec)]
+        [InlineData("ExecuteProcedure", ProcWrappingStyle.ExecuteProcedure)]
+        [InlineData("None", ProcWrappingStyle.None)]
+        [InlineData("Oracle", ProcWrappingStyle.Oracle)]
+        [InlineData("PostgreSQL", ProcWrappingStyle.PostgreSQL)]
+        public void EnumParse_ShouldReturnCorrectValue(string input, ProcWrappingStyle expected)
         {
-            // TODO: Implement tests for ProcWrappingStyle.cs
-            Assert.True(true);
+            var result = Enum.Parse<ProcWrappingStyle>(input, ignoreCase: true);
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void ProcWrappingStyleEnumParse_InvalidValue_ShouldThrow()
+        {
+            Assert.Throws<ArgumentException>(() => Enum.Parse<ProcWrappingStyle>("NotAnProcWrappingStyle"));
+        }
+
+        [Fact]
+        public void ProcWrappingStyle_ShouldContainExpectedValues()
+        {
+            var names = Enum.GetNames(typeof(ProcWrappingStyle));
+            Assert.Equal(new[] {"None", "Call", "Exec", "PostgreSQL", "Oracle", "ExecuteProcedure"}, names);
         }
 
         private SqlContainer SetupParameterWrapTest()
