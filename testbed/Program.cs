@@ -8,6 +8,7 @@ using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
 using testbed;
 using testbed.Cockroach;
+using testbed.Sybase;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddScoped<IAuditContextProvider<string>, StringAuditContextProvider>();
@@ -23,9 +24,12 @@ await using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteF
     liteDb.Dispose();
 }
 
-await using var cockroach = new CockroachDbTestContainer();
-await cockroach.RunTestWithContainerAsync(host.Services, (db, sp) => new CockroadDbTestProvider(db, sp));
-
+await using var sybase = new SybaseTestContainer();
+await sybase.RunTestWithContainerAsync(host.Services, (db, sp) => new SybaseTestProvider(db, sp));
+//
+// await using var cockroach = new CockroachDbTestContainer();
+// await cockroach.RunTestWithContainerAsync(host.Services, (db, sp) => new CockroadDbTestProvider(db, sp));
+//
 // await using (var my = new MySqlTestContainer())
 // {
 //     await my.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
@@ -34,32 +38,21 @@ await cockroach.RunTestWithContainerAsync(host.Services, (db, sp) => new Cockroa
 // var maria = new MariaDbContainer();
 // await maria.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
 // var pg = new PostgreSqlTestContainer();
-// await pg.RunTestWithContainerAsync<PostgreSQLTest>(host.Services, (db, sp) => new PostgreSQLTest(db, sp));
+// await pg.RunTestWithContainerAsync<PostgreSQLTestProvider>(host.Services,
+//     (db, sp) => new PostgreSQLTestProvider(db, sp));
 // var ms = new SqlServerTestContainer();
 // await ms.RunTestWithContainerAsync<TestProvider>(host.Services, (db, sp) => new TestProvider(db, sp));
 // var o = new OracleTestContainer();
 // await o.RunTestWithContainerAsync<OracleTestProvider>(host.Services, (db, sp) => new OracleTestProvider(db, sp));
 // var oracleConnectionString = "User Id=system;Password=mysecurepassword; Data Source=localhost:51521/XEPDB1;";
-// var oracleDb = new DatabaseContext(oracleConnectionString, OracleClientFactory.Instance, host.Services.GetRequiredService<ITypeMapRegistry>());
-// var oracle = new OracleTestProvider(oracleDb, host.Services); 
+// var oracleDb = new DatabaseContext(oracleConnectionString, OracleClientFactory.Instance,
+//     host.Services.GetRequiredService<ITypeMapRegistry>());
+// var oracle = new OracleTestProvider(oracleDb, host.Services);
 // await oracle.RunTest();
-
-
-var fb = new FirebirdSqlTestContainer();
-await fb.RunTestWithContainerAsync(host.Services, (db, sp) => new FirebirdTestProvider(db, sp));
-
-// var db2 = new Db2TestContainer();
-// await db2.RunTestWithContainerAsync(host.Services, (db, sp) => new Db2TestProvider(db, sp));
-// In test setup
-// var containers = new List<TestContainer>
-// {
-// //    new OracleTestContainer(),
-//   //  new FirebirdSqlTestContainer(),
-//     new MySqlTestContainer(),
-//     new SqlServerTestContainer(),
-//     new PostgreSqlTestContainer()
-// };
-
-//await Task.WhenAll(containers.Select(c => c.StartAsync()));
+//
+//
+// var fb = new FirebirdSqlTestContainer();
+// await fb.RunTestWithContainerAsync(host.Services, (db, sp) => new FirebirdTestProvider(db, sp));
+//
 
 Console.WriteLine("All tests complete.");

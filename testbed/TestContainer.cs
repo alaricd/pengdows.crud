@@ -72,10 +72,10 @@ public abstract class TestContainer : ITestContainer
                         Pooling = false,
                     };
 
-                    using var createConn = instance.CreateConnection();
+                    await using var createConn = instance.CreateConnection();
                     createConn.ConnectionString = csbTemp.ConnectionString;
 
-                    using var createCmd = createConn.CreateCommand();
+                    await using var createCmd = createConn.CreateCommand();
                     createCmd.CommandText = $"CREATE DATABASE '{db}';";
 
                     await createConn.OpenAsync();
@@ -86,7 +86,7 @@ public abstract class TestContainer : ITestContainer
                     Console.WriteLine(ex1);
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 await Task.Delay(1000);
             }

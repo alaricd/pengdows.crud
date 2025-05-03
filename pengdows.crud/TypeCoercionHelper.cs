@@ -13,7 +13,7 @@ public static class TypeCoercionHelper
     public static object? Coerce(
         object? value,
         Type dbFieldType,
-        ColumnInfo columnInfo,
+        IColumnInfo columnInfo,
         EnumParseFailureMode parseMode = EnumParseFailureMode.Throw)
     {
         if (Utils.IsNullOrDbNull(value)) return null;

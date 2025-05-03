@@ -172,7 +172,7 @@ public class TransactionContext : ITransactionContext
         return _context.WrapObjectName(name);
     }
 
-    public TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
+    public ITransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
     {
         throw new InvalidOperationException("Cannot begin a transaction without an open connection.");
     }
@@ -322,10 +322,6 @@ public class TransactionContext : ITransactionContext
         _isCompleted = true;
     }
 
-    ~TransactionContext()
-    {
-        Dispose(false);
-    }
 
     private void EnsureConnectionIsOpen()
     {

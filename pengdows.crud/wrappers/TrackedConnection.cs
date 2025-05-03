@@ -8,7 +8,7 @@ using pengdows.crud.threading;
 
 namespace pengdows.crud.wrappers;
 
-internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
+public class TrackedConnection : ITrackedConnection, IAsyncDisposable
 {
     private readonly DbConnection _connection;
     private readonly StateChangeEventHandler? _onStateChange;
@@ -23,7 +23,7 @@ internal class TrackedConnection : ITrackedConnection, IAsyncDisposable
     private readonly SemaphoreSlim? _semaphoreSlim;
 
 
-    internal TrackedConnection(
+    protected internal TrackedConnection(
         DbConnection conn,
         StateChangeEventHandler? onStateChange = null,
         Action<DbConnection>? onFirstOpen = null,

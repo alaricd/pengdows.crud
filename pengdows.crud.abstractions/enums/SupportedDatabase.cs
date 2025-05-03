@@ -10,5 +10,6 @@ public enum SupportedDatabase
     Sqlite,
     Firebird,
     CockroachDb,
-    MariaDb
+    MariaDb,
+    Sybase
 }

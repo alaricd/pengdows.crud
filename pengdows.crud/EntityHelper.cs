@@ -20,11 +20,11 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
     // Cache for compiled property setters
     private static readonly ConcurrentDictionary<PropertyInfo, Action<object, object?>> _propertySetters = new();
     private readonly IDatabaseContext _context;
-    private readonly ColumnInfo? _idColumn;
+    private readonly IColumnInfo? _idColumn;
     private readonly IServiceProvider _serviceProvider;
-    private readonly TableInfo _tableInfo;
+    private readonly ITableInfo _tableInfo;
 
-    private readonly ColumnInfo? _versionColumn;
+    private readonly IColumnInfo? _versionColumn;
     private readonly Type? _userFieldType = null;
 
     public EntityHelper(IDatabaseContext databaseContext,
@@ -407,8 +407,7 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
         foreach (var column in _tableInfo.Columns.Values)
         {
             if (column.IsId
-                || column.IsVersion
-                || column.IsNonUpdateable
+                || column.IsVersion || column.IsNonUpdateable
                 || column.IsCreatedBy
                 || column.IsCreatedOn)
                 //Skip columns that should never be directly updated

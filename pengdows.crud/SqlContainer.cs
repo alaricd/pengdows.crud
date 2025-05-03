@@ -83,16 +83,15 @@ public class SqlContainer : ISqlContainer
         ITrackedConnection? conn = null;
         DbCommand? cmd = null;
         try
-        {
-            await using var contextLocker = _context.GetLock();
-            await contextLocker.LockAsync();
+        { await using var contextLocker = _context.GetLock();
+            await contextLocker.LockAsync().ConfigureAwait(false);
             var isTransaction = _context is ITransactionContext;
             conn = _context.GetConnection(ExecutionType.Write, isTransaction);
             await using var connectionLocker = conn.GetLock();
-            await connectionLocker.LockAsync();
+            await connectionLocker.LockAsync().ConfigureAwait(false);
             cmd = PrepareCommand(conn, commandType, ExecutionType.Write);
 
-            return await cmd.ExecuteNonQueryAsync();
+            return await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -124,11 +123,11 @@ public class SqlContainer : ISqlContainer
         try
         {
             await using var contextLocker = _context.GetLock();
-            await contextLocker.LockAsync();
+            await contextLocker.LockAsync().ConfigureAwait(false);
             var isTransaction = _context is ITransactionContext;
             conn = _context.GetConnection(ExecutionType.Read, isTransaction);
             var connectionLocker = conn.GetLock();
-            await connectionLocker.LockAsync();
+            await connectionLocker.LockAsync().ConfigureAwait(false);
             cmd = PrepareCommand(conn, commandType, ExecutionType.Read);
 
             // unless the databaseContext is in a transaction or SingleConnection mode, 
@@ -335,11 +334,15 @@ public class SqlContainer : ISqlContainer
         // Clean up unmanaged resources if necessary (though there may be none in your case)
 
         _disposed = true;
+        
     }
 
-    ~SqlContainer()
+
+
+    public async ValueTask DisposeAsync()
     {
-        // Finalizer calls Dispose(false) to clean up unmanaged resources
-        Dispose(false);
+        Dispose();
+        await Task.CompletedTask;
     }
+
 }
