@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using Xunit;
 
@@ -41,5 +42,89 @@ public class UtilsTests
 
         return attr;
     }
-    
+
+    [Fact]
+    public void IsNullOrDbNull_ReturnsTrue_ForNull()
+    {
+        Assert.True(Utils.IsNullOrDbNull(null));
+    }
+
+    [Fact]
+    public void IsNullOrDbNull_ReturnsTrue_ForDbNull()
+    {
+        Assert.True(Utils.IsNullOrDbNull(DBNull.Value));
+    }
+
+    [Fact]
+    public void IsNullOrDbNull_ReturnsFalse_ForValue()
+    {
+        Assert.False(Utils.IsNullOrDbNull("not null"));
+    }
+
+    public static IEnumerable<object[]> ZeroValues => new List<object[]>
+    {
+        new object[] { (byte)0 },
+        new object[] { (sbyte)0 },
+        new object[] { (short)0 },
+        new object[] { (ushort)0 },
+        new object[] { 0 },
+        new object[] { 0u },
+        new object[] { 0L },
+        new object[] { 0UL },
+        new object[] { 0f },
+        new object[] { 0d },
+        new object[] { 0m },
+    };
+
+    [Theory]
+    [MemberData(nameof(ZeroValues))]
+    public void IsZeroNumeric_ReturnsTrue_ForZeroNumbers(object value)
+    {
+        Assert.True(Utils.IsZeroNumeric(value));
+    }
+
+
+    [Theory]
+    [InlineData((byte)1)]
+    [InlineData("text")]
+    [InlineData(null)]
+    [InlineData(true)]
+    public void IsZeroNumeric_ReturnsFalse_ForNonZeroOrInvalid(object value)
+    {
+        Assert.False(Utils.IsZeroNumeric(value));
+    }
+
+    [Fact]
+    public void IsNullOrEmpty_ReturnsTrue_ForNullCollection()
+    {
+        Assert.True(Utils.IsNullOrEmpty<string>(null));
+    }
+
+    [Fact]
+    public void IsNullOrEmpty_ReturnsTrue_ForEmptyList()
+    {
+        var empty = new List<int>();
+        Assert.True(Utils.IsNullOrEmpty(empty));
+    }
+
+    [Fact]
+    public void IsNullOrEmpty_ReturnsFalse_ForPopulatedList()
+    {
+        var list = new List<string> { "item" };
+        Assert.False(Utils.IsNullOrEmpty(list));
+    }
+
+    [Fact]
+    public void IsNullOrEmpty_ReturnsTrue_ForEmptyEnumerable()
+    {
+        IEnumerable<int> GetEmpty() { yield break; }
+        Assert.True(Utils.IsNullOrEmpty(GetEmpty()));
+    }
+
+    [Fact]
+    public void IsNullOrEmpty_ReturnsFalse_ForPopulatedEnumerable()
+    {
+        IEnumerable<int> GetItems() { yield return 1; }
+        Assert.False(Utils.IsNullOrEmpty(GetItems()));
+    }
 }

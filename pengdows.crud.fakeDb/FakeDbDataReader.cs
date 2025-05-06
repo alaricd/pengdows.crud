@@ -21,6 +21,12 @@ public class FakeDbDataReader : DbDataReader
     public FakeDbDataReader() : this(new List<Dictionary<string, object>>())
     {
     }
+    
+    public override Task<T> GetFieldValueAsync<T>(int ordinal, CancellationToken cancellationToken)
+    {
+        var value = GetValue(ordinal);
+        return Task.FromResult((T)Convert.ChangeType(value, typeof(T)));
+    }
 
     public override int FieldCount
         => _rows.FirstOrDefault()?.Count ?? 0;
@@ -59,12 +65,12 @@ public class FakeDbDataReader : DbDataReader
 
     public override string GetName(int i)
     {
-        return _rows[_index].Keys.ElementAt(i);
+        return _rows[Math.Max(_index, 0)].Keys.ElementAt(i);
     }
 
     public override int GetOrdinal(string name)
     {
-        return _rows[_index].Keys.ToList().IndexOf(name);
+        return _rows[Math.Max(_index, 0)].Keys.ToList().IndexOf(name);
     }
 
     public override bool IsDBNull(int i)
