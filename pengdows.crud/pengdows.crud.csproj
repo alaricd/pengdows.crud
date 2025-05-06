@@ -19,9 +19,9 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.4" />
     </ItemGroup>
     <ItemGroup>
-      <Folder Include="context\" />
+      <ProjectReference Include="..\pengdows.crud.abstractions\pengdows.crud.abstractions.csproj" />
     </ItemGroup>
     <ItemGroup>
-      <ProjectReference Include="..\pengdows.crud.abstractions\pengdows.crud.abstractions.csproj" />
+      <EmbeddedResource Include="xml\Sqlite.schema.xml" />
     </ItemGroup>
 </Project>

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using AdoNetCore.AseClient;
 using DotNet.Testcontainers.Containers;
 using FirebirdSql.Data.FirebirdClient;
 using Oracle.ManagedDataAccess.Client;
@@ -21,7 +22,8 @@ public abstract class TestContainer : ITestContainer
 
         Console.WriteLine($"Running test with container: {GetType().Name}");
         await testProvider.RunTest();
-        Console.WriteLine($"Test finished: MaxConnections={dbContext.MaxNumberOfConnections} CurrentOpenConnection={dbContext.NumberOfOpenConnections}");
+        Console.WriteLine(
+            $"Test finished: MaxConnections={dbContext.MaxNumberOfConnections} CurrentOpenConnection={dbContext.NumberOfOpenConnections}");
     }
 
     public abstract Task StartAsync();
@@ -32,16 +34,18 @@ public abstract class TestContainer : ITestContainer
     {
         var csb = instance.CreateConnectionStringBuilder();
         csb.ConnectionString = connectionString;
-        var connection = instance.CreateConnection();
-        connection.ConnectionString = csb.ConnectionString;
 
         var timeout = TimeSpan.FromSeconds(numberOfSecondsToWait);
         var startTime = DateTime.UtcNow;
 
+        var lastError = String.Empty;
         while (DateTime.UtcNow - startTime < timeout)
         {
+            await using var connection = instance.CreateConnection();
             try
             {
+                connection.ConnectionString = csb.ConnectionString;
+
                 await connection.OpenAsync();
                 await connection.CloseAsync();
                 return;
@@ -86,13 +90,25 @@ public abstract class TestContainer : ITestContainer
                     Console.WriteLine(ex1);
                 }
             }
+            catch (AseException aseException)
+            {
+                Console.WriteLine(aseException);
+                await Task.Delay(1000);
+            }
             catch (Exception ex)
             {
+                var currentError = ex.Message;
+                if (currentError != lastError)
+                {
+                    Console.WriteLine(currentError);
+                }
+
+                lastError = currentError;
                 await Task.Delay(1000);
             }
         }
 
-        throw new Exception("Could not connect to database.");
+        throw new TimeoutException($"Could not connect after {numberOfSecondsToWait}s.");
     }
 
     public async ValueTask DisposeAsync()
@@ -111,5 +127,4 @@ public abstract class TestContainer : ITestContainer
         // Override this in derived test container classes if they hold disposable resources
         return ValueTask.CompletedTask;
     }
-
 }

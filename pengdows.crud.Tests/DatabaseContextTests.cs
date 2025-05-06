@@ -1,7 +1,7 @@
-
 using System;
+using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
+using System.Linq;
 using System.Threading.Tasks;
 using Moq;
 using pengdows.crud.enums;
@@ -13,21 +13,25 @@ namespace pengdows.crud.tests;
 
 public class DatabaseContextTests
 {
-    private readonly DbProviderFactory _mockFactory = new FakeDbFactory(SupportedDatabase.SqlServer.ToString());
-    private readonly DbConnection _mockConnection ;
-    private readonly DbCommand _mockCommand;
+    public static IEnumerable<object[]> AllSupportedProviders() =>
+        Enum.GetValues<SupportedDatabase>()
+            .Where(p => p != SupportedDatabase.Unknown)
+            .Select(p => new object[] { p });
 
-    public DatabaseContextTests()
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public void CanInitializeContext_ForEachSupportedProvider(SupportedDatabase product)
     {
-        // _mockFactory = new Mock<DbProviderFactory>();
-        // _mockConnection = new Mock<DbConnection>();
-        // _mockCommand = new Mock<DbCommand>();
-        //
-        // _mockFactory.Setup(f => f.CreateConnection()).Returns(_mockConnection.Object);
-        // _mockConnection.Setup(c => c.CreateCommand()).Returns(_mockCommand.Object);
-        // _mockConnection.SetupProperty(c => c.ConnectionString);
-        // _mockConnection.Setup(c => c.Open());
-        // _mockConnection.Setup(c => c.State).Returns(ConnectionState.Open);
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
+
+        var conn = context.GetConnection(ExecutionType.Read);
+        Assert.NotNull(conn);
+        Assert.Equal(ConnectionState.Closed, conn.State);
+        
+        var schema = conn.GetSchema();
+        Assert.NotNull(schema);
+        Assert.True(schema.Rows.Count > 0);
     }
 
     [Fact]
@@ -37,41 +41,32 @@ public class DatabaseContextTests
             new DatabaseContext("fake", (string)null!));
     }
 
-    [Fact]
-    public void GetConnection_ShouldSetConnectionString_AndOpenConnection()
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public void WrapObjectName_SplitsAndWrapsCorrectly(SupportedDatabase product)
     {
-        var context = new DatabaseContext("Data Source=test;", _mockFactory);
-        var conn = context.GetConnection(ExecutionType.Read);
-        Assert.NotNull(conn);
-      //  _mockConnection.VerifySet(c => c.ConnectionString = "Data Source=test;", Times.Once);
-       // _mockConnection.Verify(c => c.Open(), Times.Once);
-    }
-
-    [Fact]
-    public void WrapObjectName_SplitsAndWrapsCorrectly()
-    {
-        var context = new DatabaseContext("Data Source=test;", _mockFactory);
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
         var wrapped = context.WrapObjectName("schema.table");
-        Assert.Contains(".", wrapped); // Simulates the wrapping e.g., [schema].[table]
+        Assert.Contains(".", wrapped);
     }
 
-    [Fact]
-    public void GenerateRandomName_ValidatesFirstChar()
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public void GenerateRandomName_ValidatesFirstChar(SupportedDatabase product)
     {
-        var context = new DatabaseContext("Data Source=test;", _mockFactory);
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
         var name = context.GenerateRandomName(10);
         Assert.True(char.IsLetter(name[0]));
     }
 
-    [Fact]
-    public void CreateDbParameter_SetsPropertiesCorrectly()
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public void CreateDbParameter_SetsPropertiesCorrectly(SupportedDatabase product)
     {
-        var parameter = new Mock<DbParameter>();
-        parameter.SetupAllProperties();
-
-       // _mockFactory.Setup(f => f.CreateParameter()).Returns(parameter.Object);
-
-        var context = new DatabaseContext("Data Source=test;", _mockFactory);
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
         var result = context.CreateDbParameter("p1", DbType.Int32, 123);
 
         Assert.Equal("p1", result.ParameterName);
@@ -79,30 +74,36 @@ public class DatabaseContextTests
         Assert.Equal(123, result.Value);
     }
 
-    [Fact]
-    public async Task CloseAndDisposeConnectionAsync_WithAsyncDisposable_DisposesCorrectly()
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public async Task CloseAndDisposeConnectionAsync_WithAsyncDisposable_DisposesCorrectly(SupportedDatabase product)
     {
         var mockTracked = new Mock<ITrackedConnection>();
         mockTracked.As<IAsyncDisposable>().Setup(d => d.DisposeAsync())
             .Returns(ValueTask.CompletedTask).Verifiable();
 
-        var context = new DatabaseContext("Data Source=test;", _mockFactory);
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
         await context.CloseAndDisposeConnectionAsync(mockTracked.Object);
 
         mockTracked.As<IAsyncDisposable>().Verify(d => d.DisposeAsync(), Times.Once);
     }
 
-    [Fact]
-    public void AssertIsWriteConnection_WhenFalse_Throws()
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public void AssertIsWriteConnection_WhenFalse_Throws(SupportedDatabase product)
     {
-        var context = new DatabaseContext("Data Source=test;", _mockFactory, readWriteMode: ReadWriteMode.ReadOnly);
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, readWriteMode: ReadWriteMode.ReadOnly);
         Assert.Throws<InvalidOperationException>(() => context.AssertIsWriteConnection());
     }
 
-    [Fact]
-    public void AssertIsReadConnection_WhenFalse_Throws()
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public void AssertIsReadConnection_WhenFalse_Throws(SupportedDatabase product)
     {
-        var context = new DatabaseContext("Data Source=test;", _mockFactory, readWriteMode: ReadWriteMode.WriteOnly);
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, readWriteMode: ReadWriteMode.WriteOnly);
         Assert.Throws<InvalidOperationException>(() => context.AssertIsReadConnection());
     }
 }

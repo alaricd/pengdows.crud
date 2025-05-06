@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using pengdows.crud.dynamic;
 using pengdows.crud.enums;
 
 namespace WebApplication1.Generator;

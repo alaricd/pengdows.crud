@@ -1,3 +1,5 @@
+using pengdows.crud.dynamic;
+
 namespace WebApplication1.Generator;
 
 public class TableDef

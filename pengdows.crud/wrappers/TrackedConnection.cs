@@ -158,6 +158,11 @@ public class TrackedConnection : ITrackedConnection, IAsyncDisposable
         return _isSharedConnection ? new RealAsyncLocker(_semaphoreSlim) : NoOpAsyncLocker.Instance;
     }
 
+    public DataTable GetSchema()
+    {
+        return _connection.GetSchema();
+    }
+
     #region IDbConnection passthroughs
 
     public IDbTransaction BeginTransaction() => _connection.BeginTransaction();

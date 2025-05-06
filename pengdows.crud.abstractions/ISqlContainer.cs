@@ -30,4 +30,5 @@ public interface ISqlContainer : ISafeAsyncDisposableBase
     void Clear();
     string WrapForStoredProc(ExecutionType executionType, bool includeParameters = true);
     string WrapObjectName(string objectName);
+    string MakaParameterName(DbParameter parameter);
 }

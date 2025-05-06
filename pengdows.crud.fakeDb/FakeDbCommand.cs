@@ -9,6 +9,15 @@ namespace pengdows.crud.FakeDb;
 
 public sealed class FakeDbCommand : DbCommand
 {
+    public FakeDbCommand(DbConnection connection)
+    {
+        this.Connection = connection;
+    }
+
+    public FakeDbCommand()
+    {
+    }
+
     public override string CommandText { get; set; }
     public override int CommandTimeout { get; set; }
     public override CommandType CommandType { get; set; }

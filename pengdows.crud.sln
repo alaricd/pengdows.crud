@@ -14,6 +14,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pengdows.crud.fakeDb", "pen
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pengdows.crud.abstractions", "pengdows.crud.abstractions\pengdows.crud.abstractions.csproj", "{6789A923-BDFC-4811-8BD9-0E091B21D435}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pengdows.crud.dynamic", "pengdows.crud.dynamic\pengdows.crud.dynamic.csproj", "{E16B30B5-9CDD-4BAB-BC39-22A6893106D4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,5 +54,9 @@ Global
 		{6789A923-BDFC-4811-8BD9-0E091B21D435}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6789A923-BDFC-4811-8BD9-0E091B21D435}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6789A923-BDFC-4811-8BD9-0E091B21D435}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E16B30B5-9CDD-4BAB-BC39-22A6893106D4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E16B30B5-9CDD-4BAB-BC39-22A6893106D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E16B30B5-9CDD-4BAB-BC39-22A6893106D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E16B30B5-9CDD-4BAB-BC39-22A6893106D4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

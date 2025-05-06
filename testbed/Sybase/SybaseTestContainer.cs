@@ -23,7 +23,7 @@ public class SybaseTestContainer : TestContainer, ITestContainer
             .WithEnvironment("SA_PASSWORD", Password)
             .WithPortBinding(5000, true)
             .WithPortBinding(5001, true)
-           // .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5000))
+            .WithWaitStrategy(Wait.ForUnixContainer())
             .Build();
 
         // start immediately so we can await in StartAsync
@@ -42,7 +42,7 @@ public class SybaseTestContainer : TestContainer, ITestContainer
         await CreateTestDatabase(cs);
 
         // switch default catalog
-        _connectionString = $"Host=localhost;Port={hostPort};Database={Database};Uid={Username};Pwd={Password};";
+        _connectionString = $"DataSource=localhost;Port={hostPort};Database={Database};Uid={Username};Pwd={Password};";
     }
 
     private static async Task CreateTestDatabase(string masterCs)

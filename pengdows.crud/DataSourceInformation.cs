@@ -139,6 +139,8 @@ namespace pengdows.crud
 
             var final = InferDatabaseProduct(version);
             Product = final != SupportedDatabase.Unknown ? final : initial;
+            schema.TableName = ((schema.TableName?.Length < 1) ? Product.ToString() : schema.TableName);
+            schema.WriteXml($"{Product}.schema.xml", XmlWriteMode.WriteSchema);
 
             ApplySchema(schema);
             PrepareStatements = false;
@@ -200,27 +202,36 @@ namespace pengdows.crud
         {
             if (IsSqliteSync(connection))
             {
-                return BuildEmptySchema(
-                    "SQLite", "Unknown", "?", "?", 0,
-                    "@\\w+", "[@:]\\w+", true);
+                return ReadSqliteSchema();
             }
 
             return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+        }
+
+        private static DataTable ReadSqliteSchema()
+        {
+            var resourceName = $"pengdows.crud.xml.{SupportedDatabase.Sqlite}.schema.xml";
+
+            using var stream = typeof(DataSourceInformation).Assembly
+                                   .GetManifestResourceStream(resourceName)
+                               ?? throw new FileNotFoundException($"Embedded schema not found: {resourceName}");
+
+            var table = new DataTable();
+            table.ReadXml(stream);
+            return table;
         }
 
         private static async Task<DataTable> GetSchemaAsync(ITrackedConnection connection)
         {
             if (await IsSqliteAsync(connection).ConfigureAwait(false))
             {
-                return BuildEmptySchema(
-                    "SQLite", "Unknown", "?", "?", 0,
-                    "@\\w+", "[@:]\\w+", true);
+                return ReadSqliteSchema();
             }
 
             return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
         }
 
-        private static async Task<object> ExecuteScalarViaReaderAsync(ITrackedConnection connection, string sql)
+        private static async Task<object?> ExecuteScalarViaReaderAsync(ITrackedConnection connection, string sql)
         {
             try
             {

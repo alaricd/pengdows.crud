@@ -6,4 +6,11 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\pengdows.crud.abstractions\pengdows.crud.abstractions.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="xml\*.schema.xml" />
+    </ItemGroup>
+
 </Project>

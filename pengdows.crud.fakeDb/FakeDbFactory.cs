@@ -1,27 +1,32 @@
 #region
 
 using System.Data.Common;
+using pengdows.crud.enums;
 
 #endregion
 
 namespace pengdows.crud.FakeDb;
- 
 
 public sealed class FakeDbFactory : DbProviderFactory
 {
-    private readonly string _pretendToBe;
+    private readonly SupportedDatabase _pretendToBe;
     public static readonly FakeDbFactory Instance = new();
 
     private FakeDbFactory()
     {
-        _pretendToBe = "fakeDb";
+        _pretendToBe = SupportedDatabase.Unknown;
     }
 
     public FakeDbFactory(string pretendToBe)
     {
+        _pretendToBe = Enum.Parse<SupportedDatabase>(pretendToBe);
+    }
+
+    public FakeDbFactory(SupportedDatabase pretendToBe)
+    {
         _pretendToBe = pretendToBe;
     }
-    
+
     public override DbCommand CreateCommand()
     {
         return new FakeDbCommand();
@@ -29,7 +34,9 @@ public sealed class FakeDbFactory : DbProviderFactory
 
     public override DbConnection CreateConnection()
     {
-        return new FakeDbConnection();
+        var c = new FakeDbConnection();
+        c.EmulatedProduct = _pretendToBe;
+        return c;
     }
 
     public override DbParameter CreateParameter()

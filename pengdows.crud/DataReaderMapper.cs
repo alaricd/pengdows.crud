@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using System.Reflection;
 
@@ -6,11 +7,12 @@ namespace pengdows.crud;
 public static class DataReaderMapper
 {
     public static async Task<List<T>> LoadObjectsFromDataReaderAsync<T>(
-        DbDataReader reader,
+        IDataReader reader,
         CancellationToken cancellationToken = default
     ) where T : class, new()
     {
         ArgumentNullException.ThrowIfNull(reader);
+        var rdr = reader as DbDataReader;
 
         var result = new List<T>();
         var type = typeof(T);
@@ -29,20 +31,20 @@ public static class DataReaderMapper
             }
         }
 
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        while (await rdr.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var obj = new T();
 
             foreach (var (ordinal, prop) in propertyMap)
             {
-                if (await reader.IsDBNullAsync(ordinal, cancellationToken).ConfigureAwait(false))
+                if (await rdr.IsDBNullAsync(ordinal, cancellationToken).ConfigureAwait(false))
                 {
                     continue;
                 }
 
                 try
                 {
-                    var value = await reader.GetFieldValueAsync<object>(ordinal, cancellationToken)
+                    var value = await rdr.GetFieldValueAsync<object>(ordinal, cancellationToken)
                         .ConfigureAwait(false);
                     value = Utils.IsNullOrDbNull(value)
                         ? null

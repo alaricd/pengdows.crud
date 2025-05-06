@@ -83,7 +83,8 @@ public class SqlContainer : ISqlContainer
         ITrackedConnection? conn = null;
         DbCommand? cmd = null;
         try
-        { await using var contextLocker = _context.GetLock();
+        {
+            await using var contextLocker = _context.GetLock();
             await contextLocker.LockAsync().ConfigureAwait(false);
             var isTransaction = _context is ITransactionContext;
             conn = _context.GetConnection(ExecutionType.Write, isTransaction);
@@ -118,7 +119,7 @@ public class SqlContainer : ISqlContainer
     {
         _context.AssertIsReadConnection();
 
-        ITrackedConnection conn = null;
+        ITrackedConnection conn;
         DbCommand cmd = null;
         try
         {
@@ -313,10 +314,9 @@ public class SqlContainer : ISqlContainer
     }
 
 
-    public string WrapObjectName(string objectName)
-    {
-        return _context.WrapObjectName(objectName);
-    }
+    public string WrapObjectName(string objectName) => _context.WrapObjectName(objectName);
+
+    public string MakaParameterName(DbParameter parameter) => _context.MakeParameterName(parameter);
 
     private void Dispose(bool disposing)
     {
@@ -334,9 +334,7 @@ public class SqlContainer : ISqlContainer
         // Clean up unmanaged resources if necessary (though there may be none in your case)
 
         _disposed = true;
-        
     }
-
 
 
     public async ValueTask DisposeAsync()
@@ -344,5 +342,4 @@ public class SqlContainer : ISqlContainer
         Dispose();
         await Task.CompletedTask;
     }
-
 }
