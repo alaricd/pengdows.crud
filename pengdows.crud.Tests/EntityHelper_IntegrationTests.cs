@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using pengdows.crud.enums;
@@ -173,6 +174,24 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
         Assert.True(list.Count > 0 && r2.Count == list.Count);
         var loaded = list[0];
         Assert.Equal(s, loaded.Name);
+    }
+
+    [Fact]
+    public async Task BuildDeleteTask()
+    {
+        await BuildTestTable();
+        var s = Guid.NewGuid().ToString();
+        var tmp = new TestEntity { Name = s };
+        var create = entityHelper.BuildCreate(tmp);
+        await create.ExecuteNonQueryAsync();
+        //var entities = 
+        var retrieve = entityHelper.BuildBaseRetrieve("a");
+        var x = await entityHelper.LoadListAsync(retrieve);
+        var foundList = x.FindAll(itm => itm.Name == s);
+        Assert.Equal(foundList.Count, 1);
+        var found = foundList.First();
+        Assert.True(found.Name == tmp.Name);
+        entityHelper.BuildDelete(found.Id);
     }
 
     [Fact]

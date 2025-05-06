@@ -18,6 +18,10 @@ public class FakeDbDataReader : DbDataReader
         _rows = rows?.ToList() ?? new List<Dictionary<string, object>>();
     }
 
+    public FakeDbDataReader() : this(new List<Dictionary<string, object>>())
+    {
+    }
+
     public override int FieldCount
         => _rows.FirstOrDefault()?.Count ?? 0;
 
