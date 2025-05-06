@@ -3,6 +3,7 @@
 using System.Data;
 using System.Data.Common;
 using pengdows.crud.enums;
+using pengdows.crud.infrastructure;
 using pengdows.crud.threading;
 using pengdows.crud.wrappers;
 
@@ -10,7 +11,7 @@ using pengdows.crud.wrappers;
 
 namespace pengdows.crud;
 
-public interface IDatabaseContext : IDisposable, IAsyncDisposable
+public interface IDatabaseContext : ISafeAsyncDisposableBase
 {
     DbMode ConnectionMode { get; }
     ITypeMapRegistry TypeMapRegistry { get; }
@@ -41,7 +42,7 @@ public interface IDatabaseContext : IDisposable, IAsyncDisposable
     DbParameter CreateDbParameter<T>(string? name, DbType type, T value);
     ITrackedConnection GetConnection(ExecutionType executionType, bool isShared = false);
     string WrapObjectName(string name);
-    TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null);
+    ITransactionContext BeginTransaction(IsolationLevel? isolationLevel = null);
     string GenerateRandomName(int length = 5, int parameterNameMaxLength = 30);
     DbParameter CreateDbParameter<T>(DbType type, T value);
 

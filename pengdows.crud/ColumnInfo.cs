@@ -8,7 +8,7 @@ using System.Text.Json;
 
 namespace pengdows.crud;
 
-public class ColumnInfo
+public class ColumnInfo:IColumnInfo
 {
     public string Name { get; init; }
     public PropertyInfo PropertyInfo { get; init; }

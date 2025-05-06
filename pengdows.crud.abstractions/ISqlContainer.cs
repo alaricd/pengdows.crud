@@ -3,6 +3,8 @@
 using System.Data;
 using System.Data.Common;
 using System.Text;
+using pengdows.crud.enums;
+using pengdows.crud.infrastructure;
 using pengdows.crud.wrappers;
 
 #endregion
@@ -13,7 +15,7 @@ namespace pengdows.crud;
 /// Represents a composable, parameterized SQL container that supports dynamic query building,
 /// safe parameter binding, and execution in the context of a tracked database connection.
 /// </summary>
-public interface ISqlContainer : IDisposable
+public interface ISqlContainer : ISafeAsyncDisposableBase
 {
     StringBuilder Query { get; }
     int ParameterCount { get; }
@@ -24,9 +26,9 @@ public interface ISqlContainer : IDisposable
     Task<T?> ExecuteScalarAsync<T>(CommandType commandType = CommandType.Text);
     Task<ITrackedReader> ExecuteReaderAsync(CommandType commandType = CommandType.Text);
     void AddParameters(IEnumerable<DbParameter> list);
-    void Dispose();
     DbCommand CreateCommand(ITrackedConnection conn);
     void Clear();
     string WrapForStoredProc(ExecutionType executionType, bool includeParameters = true);
     string WrapObjectName(string objectName);
+    string MakaParameterName(DbParameter parameter);
 }

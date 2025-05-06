@@ -2,6 +2,7 @@
 
 using System.Data;
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,6 +32,38 @@ public class DatabaseContext : IDatabaseContext
     private string _connectionString;
     public ReadWriteMode ReadWriteMode { get; }
 
+
+    public DatabaseContext(
+        string connectionString,
+        string providerFactory,
+        ITypeMapRegistry? typeMapRegistry = null,
+        DbMode mode = DbMode.Standard,
+        ReadWriteMode readWriteMode = ReadWriteMode.ReadWrite,
+        ILoggerFactory? loggerFactory = null
+    )
+    {
+        loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        _logger = loggerFactory?.CreateLogger<IDatabaseContext>() ?? NullLogger<IDatabaseContext>.Instance;
+        var factoryName = providerFactory ?? throw new NullReferenceException(nameof(providerFactory));
+        _factory = DbProviderFactories.GetFactory(factoryName) ?? throw new NullReferenceException(factoryName);
+        ReadWriteMode = readWriteMode;
+        TypeMapRegistry = typeMapRegistry ?? new TypeMapRegistry();
+        ConnectionMode = mode;
+        InitializeInternals(connectionString, mode, readWriteMode);
+    }
+
+    public DatabaseContext(
+        DatabaseContextConfiguration configuration,
+        ILoggerFactory? loggerFactory = null) :
+        this(configuration.connectionString,
+            configuration.factory,
+            configuration.typeMapRegistry,
+            configuration.mode,
+            configuration.readWriteMode,
+            loggerFactory)
+    {
+    }
+
     public DatabaseContext(
         string connectionString,
         DbProviderFactory factory,
@@ -40,13 +73,21 @@ public class DatabaseContext : IDatabaseContext
         ILoggerFactory? loggerFactory = null
     )
     {
-        loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
-        ReadWriteMode = readWriteMode;
-        TypeMapRegistry = typeMapRegistry ?? new TypeMapRegistry();
-        ConnectionMode = mode;
-        _factory = factory;
-        _logger = loggerFactory?.CreateLogger<IDatabaseContext>() ?? NullLogger<IDatabaseContext>.Instance;
-        InitializeInternals(connectionString, mode, readWriteMode);
+        try
+        {
+            loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+            _logger = loggerFactory?.CreateLogger<IDatabaseContext>() ?? NullLogger<IDatabaseContext>.Instance;
+            ReadWriteMode = readWriteMode;
+            TypeMapRegistry = typeMapRegistry ?? new TypeMapRegistry();
+            ConnectionMode = mode;
+            _factory = factory ?? throw new NullReferenceException(nameof(factory));
+            InitializeInternals(connectionString, mode, readWriteMode);
+        }
+        catch(Exception e)
+        {
+            _logger.LogError(e.Message);
+            throw;
+        }
     }
 
     public bool IsReadOnlyConnection => _isReadConnection && !_isWriteConnection;
@@ -90,12 +131,15 @@ public class DatabaseContext : IDatabaseContext
 
     public string WrapObjectName(string name)
     {
-        if (string.IsNullOrEmpty(name)) return string.Empty;
-
-        var ss = name.Split(CompositeIdentifierSeparator);
         var qp = QuotePrefix;
         var qs = QuoteSuffix;
-        if (name.Contains(qp) || name.Contains(qs)) return name; //already wrapped or contains a quote
+        var tmp = name?.Replace(qp, string.Empty)?.Replace(qs, string.Empty);
+        if (string.IsNullOrEmpty(tmp))
+        {
+            return string.Empty;
+        }
+
+        var ss = tmp.Split(CompositeIdentifierSeparator);
 
         var sb = new StringBuilder();
         foreach (var s in ss)
@@ -176,7 +220,7 @@ public class DatabaseContext : IDatabaseContext
     }
 
 
-    public TransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
+    public ITransactionContext BeginTransaction(IsolationLevel? isolationLevel = null)
     {
         if (!_isWriteConnection && isolationLevel is null) isolationLevel = IsolationLevel.RepeatableRead;
 
@@ -443,7 +487,7 @@ public class DatabaseContext : IDatabaseContext
                 throw new ConnectionFailedException(ex.Message);
             }
 
-            _dataSourceInfo = new DataSourceInformation(conn);
+            _dataSourceInfo = DataSourceInformation.Create(conn);
             SetupConnectionSessionSettingsForProvider(conn);
             Name = _dataSourceInfo.DatabaseProductName;
             if (_dataSourceInfo.Product == SupportedDatabase.Sqlite)
@@ -468,10 +512,6 @@ public class DatabaseContext : IDatabaseContext
                 ApplyConnectionSessionSettings(conn);
                 _connection = conn;
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex.Message);
         }
         finally
         {
@@ -615,12 +655,6 @@ public class DatabaseContext : IDatabaseContext
         }
 
         _connection = null;
-    }
-
-
-    ~DatabaseContext()
-    {
-        Dispose(disposing: false);
     }
 
 

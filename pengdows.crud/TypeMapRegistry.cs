@@ -14,7 +14,7 @@ public class TypeMapRegistry : ITypeMapRegistry
 {
     private readonly ConcurrentDictionary<Type, TableInfo> _typeMap = new();
 
-    public TableInfo GetTableInfo<T>()
+    public ITableInfo GetTableInfo<T>()
     {
         var type = typeof(T);
 

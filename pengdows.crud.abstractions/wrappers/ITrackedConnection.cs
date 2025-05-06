@@ -23,4 +23,5 @@ public interface ITrackedConnection : IDbConnection
     ValueTask DisposeAsync();
 
     ILockerAsync GetLock();
+    DataTable GetSchema();
 }

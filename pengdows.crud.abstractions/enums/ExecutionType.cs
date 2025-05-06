@@ -1,4 +1,4 @@
-namespace pengdows.crud;
+namespace pengdows.crud.enums;
 
 public enum ExecutionType
 {

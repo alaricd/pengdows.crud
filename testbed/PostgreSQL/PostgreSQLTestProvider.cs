@@ -2,12 +2,12 @@ using pengdows.crud;
 
 namespace testbed;
 
-public class PostgreSQLTest
+public class PostgreSQLTestProvider
     : TestProvider
 {
     private readonly IDatabaseContext context;
 
-    public PostgreSQLTest(IDatabaseContext context, IServiceProvider serviceProvider) : base(context, serviceProvider)
+    public PostgreSQLTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context, serviceProvider)
     {
         this.context = context;
     }

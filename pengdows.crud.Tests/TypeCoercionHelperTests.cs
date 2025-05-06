@@ -44,11 +44,14 @@ public class TypeCoercionHelperTests
         var result = TypeCoercionHelper.Coerce(null, typeof(string), typeof(string));
         Assert.Null(result);
     }
+
     [Fact]
     public void Coerce_StringToDateTime_ParsesCorrectly()
     {
         var input = "2023-04-30T10:00:00Z";
-        var expected = DateTime.Parse(input, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal);
+        var expected = DateTime.Parse(input, null,
+            System.Globalization.DateTimeStyles.AdjustToUniversal |
+            System.Globalization.DateTimeStyles.AssumeUniversal);
         var result = TypeCoercionHelper.Coerce(input, typeof(string), typeof(DateTime));
 
         Assert.Equal(expected, result);

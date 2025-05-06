@@ -1,358 +1,378 @@
-#region
-
 using System.Data;
 using System.Data.Common;
 using System.Text.RegularExpressions;
 using pengdows.crud.enums;
 using pengdows.crud.wrappers;
 
-#endregion
-
-namespace pengdows.crud;
-
-public class DataSourceInformation : IDataSourceInformation
+namespace pengdows.crud
 {
-    private readonly bool? _supportsNamedParameters;
-
-    public DataSourceInformation(IDbConnection connection)
-        : this(new TrackedConnection(connection as DbConnection))
+    public class DataSourceInformation : IDataSourceInformation
     {
-    }
+        private static readonly Regex DefaultNameRegex = new("^[a-zA-Z][a-zA-Z0-9_]*$", RegexOptions.Compiled);
 
-    public DataSourceInformation(ITrackedConnection connection)
-    {
-        try
+        private static readonly Dictionary<SupportedDatabase, string> VersionQueries = new()
         {
-            var metaData = GetSchema(connection);
-            var metaDataRow = metaData.Rows[0];
+            { SupportedDatabase.SqlServer, "SELECT @@VERSION" },
+            { SupportedDatabase.Sybase, "SELECT @@VERSION" },
+            { SupportedDatabase.MySql, "SELECT VERSION()" },
+            { SupportedDatabase.MariaDb, "SELECT VERSION()" },
+            { SupportedDatabase.PostgreSql, "SELECT version()" },
+            { SupportedDatabase.CockroachDb, "SELECT version()" },
+            { SupportedDatabase.Oracle, "SELECT * FROM v$version" },
+            { SupportedDatabase.Sqlite, "SELECT sqlite_version()" },
+            { SupportedDatabase.Firebird, @"SELECT rdb$get_context('SYSTEM','ENGINE_VERSION') FROM rdb$database" }
+        };
 
-            DatabaseProductName = GetColumnValue<string>(metaDataRow, "DataSourceProductName", "Unknown");
-            DatabaseProductVersion = GetColumnValue<string>(metaDataRow, "DataSourceProductVersion", "Unknown");
-            Product = InferDatabaseProduct(DatabaseProductName);
-            ParameterMarkerPattern = GetColumnValue<string>(metaDataRow, "ParameterMarkerPattern", null);
-            _supportsNamedParameters = GetColumnValue<bool?>(metaDataRow, "SupportsNamedParameters");
-            ParameterMarker = GetColumnValue<string>(metaDataRow, "ParameterMarkerFormat", "?");
-            ParameterNameMaxLength = GetColumnValue(metaDataRow, "ParameterNameMaxLength", 0);
-            ParameterNamePatternRegex = new Regex("[a-zA-Z][a-zA-Z0-9_]*");
-            CompositeIdentifierSeparator = ".";
+        private static readonly Dictionary<SupportedDatabase, int> MaxParameterLimits = new()
+        {
+            { SupportedDatabase.SqlServer, 2100 },
+            { SupportedDatabase.Sybase, 2100 },
+            { SupportedDatabase.Sqlite, 999 },
+            { SupportedDatabase.MySql, 65535 },
+            { SupportedDatabase.MariaDb, 65535 },
+            { SupportedDatabase.PostgreSql, 65535 },
+            { SupportedDatabase.CockroachDb, 65535 },
+            { SupportedDatabase.Oracle, 1000 },
+            { SupportedDatabase.Firebird, 1499 }
+        };
 
-            if (Product != SupportedDatabase.Unknown)
+        private static readonly Dictionary<SupportedDatabase, ProcWrappingStyle> ProcWrapStyles = new()
+        {
+            { SupportedDatabase.SqlServer, ProcWrappingStyle.Exec },
+            { SupportedDatabase.Sybase, ProcWrappingStyle.Exec },
+            { SupportedDatabase.Oracle, ProcWrappingStyle.Oracle },
+            { SupportedDatabase.MySql, ProcWrappingStyle.Call },
+            { SupportedDatabase.MariaDb, ProcWrappingStyle.Call },
+            { SupportedDatabase.PostgreSql, ProcWrappingStyle.PostgreSQL },
+            { SupportedDatabase.CockroachDb, ProcWrappingStyle.PostgreSQL },
+            { SupportedDatabase.Firebird, ProcWrappingStyle.ExecuteProcedure }
+        };
+
+        private static readonly Dictionary<SupportedDatabase, string> DefaultMarkers = new()
+        {
+            { SupportedDatabase.Firebird, "@" },
+            { SupportedDatabase.SqlServer, "@" },
+            { SupportedDatabase.Sybase, "@" },
+            { SupportedDatabase.MySql, "@" },
+            { SupportedDatabase.MariaDb, "@" },
+            { SupportedDatabase.Sqlite, "@" },
+            { SupportedDatabase.PostgreSql, ":" },
+            { SupportedDatabase.CockroachDb, ":" },
+            { SupportedDatabase.Oracle, ":" }
+        };
+
+        public string DatabaseProductName { get; private set; }
+        public string DatabaseProductVersion { get; private set; }
+        public SupportedDatabase Product { get; private set; }
+        public string ParameterMarkerPattern { get; private set; }
+        public bool SupportsNamedParameters { get; private set; }
+        public string ParameterMarker { get; private set; }
+        public int ParameterNameMaxLength { get; private set; }
+        public Regex ParameterNamePatternRegex { get; private set; }
+        public string QuotePrefix { get; private set; }
+        public string QuoteSuffix { get; private set; }
+        public bool PrepareStatements { get; private set; }
+        public ProcWrappingStyle ProcWrappingStyle { get; set; }
+        public int MaxParameterLimit { get; private set; }
+        public string CompositeIdentifierSeparator { get; private set; } = ".";
+
+        private DataSourceInformation()
+        {
+            ParameterNamePatternRegex = DefaultNameRegex;
+            QuotePrefix = "\"";
+            QuoteSuffix = "\"";
+        }
+
+        public DataSourceInformation(DbConnection conn)
+            : this()
+        {
+            if (conn == null)
             {
-                DatabaseProductVersion = GetDatabaseVersion(connection);
-                switch (Product)
-                {
-                    case SupportedDatabase.PostgreSql:
-                        Product = (DatabaseProductVersion.Contains("postgres", StringComparison.OrdinalIgnoreCase))
-                            ? SupportedDatabase.PostgreSql
-                            : SupportedDatabase.CockroachDb;
-                        break;
-                    case SupportedDatabase.MySql:
-                    case SupportedDatabase.MariaDb:
-                        Product = DatabaseProductVersion.Contains("maria", StringComparison.OrdinalIgnoreCase)
-                            ? SupportedDatabase.MariaDb
-                            : SupportedDatabase.MySql;
-                        break;
-                }
+                throw new ArgumentNullException(nameof(conn));
             }
 
-            InferQuoteCharacters();
-            ParameterMarker = ExtractParameterMarker();
-            _supportsNamedParameters ??= ParameterMarker != "?";
-            PrepareStatements = TestPrepareCommand(connection);
-            SetupStoredProcWrap();
-            MaxParameterLimit = GetMaxParameterLimitFor(Product);
-        }
-        catch (Exception)
-        {
-            SetupStoredProcWrap();
-
-            throw;
-        }
-    }
-
-    public string ParameterMarkerPattern { get; }
-
-    public string QuotePrefix { get; private set; } = "\"";
-    public string QuoteSuffix { get; private set; } = "\"";
-
-    public bool SupportsNamedParameters => _supportsNamedParameters ?? false;
-
-    public string ParameterMarker { get; }
-    public int ParameterNameMaxLength { get; }
-    public Regex ParameterNamePatternRegex { get; }
-    public string DatabaseProductName { get; }
-    public string DatabaseProductVersion { get; }
-    public string CompositeIdentifierSeparator { get; }
-    public bool PrepareStatements { get; }
-    public ProcWrappingStyle ProcWrappingStyle { get; internal set; }
-    public int MaxParameterLimit { get; }
-    public SupportedDatabase Product { get; private set; } = SupportedDatabase.Unknown;
-
-    public bool SupportsMerge => Product switch
-    {
-        SupportedDatabase.SqlServer => true,
-        SupportedDatabase.Oracle => true,
-        SupportedDatabase.Firebird => true,
-        //SupportedDatabase.Db2 => true,
-        _ => false
-    };
-
-    public bool SupportsInsertOnConflict => Product switch
-    {
-        SupportedDatabase.PostgreSql => true,
-        SupportedDatabase.CockroachDb => true,
-        SupportedDatabase.Sqlite => true,
-        SupportedDatabase.MySql => true,
-        SupportedDatabase.MariaDb => true,
-        _ => false
-    };
-
-    public string GetDatabaseVersion(ITrackedConnection connection)
-    {
-        try
-        {
-            var versionQuery = Product switch
+            var tracked = (conn as ITrackedConnection) ?? new TrackedConnection(conn);
+            if (tracked.State != ConnectionState.Open)
             {
-                SupportedDatabase.SqlServer => "SELECT @@VERSION",
-                SupportedDatabase.MySql => "SELECT VERSION()",
-                SupportedDatabase.MariaDb => "SELECT VERSION()",
-                SupportedDatabase.PostgreSql => "SELECT version()",
-                SupportedDatabase.CockroachDb => "SELECT version()",
-                SupportedDatabase.Oracle => @"SELECT * FROM v$version",
-                SupportedDatabase.Sqlite => "SELECT sqlite_version()",
-                SupportedDatabase.Firebird => "SELECT rdb$get_context('SYSTEM', 'VERSION')",
-                _ => string.Empty
-            };
+                tracked.Open();
+            }
 
-            if (string.IsNullOrWhiteSpace(versionQuery)) return "Unknown Database Version";
-
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = versionQuery;
-            var version = cmd.ExecuteScalar()?.ToString();
-            return version ?? "Unknown Version";
+            InitializeSync(tracked);
         }
-        catch (Exception ex)
+
+        public static DataSourceInformation Create(ITrackedConnection connection)
         {
-            return "Error retrieving version: " + ex.Message;
+            return CreateAsync(connection).GetAwaiter().GetResult();
         }
-    }
 
-    private static int GetMaxParameterLimitFor(SupportedDatabase db)
-    {
-        return db switch
+        public static Task<DataSourceInformation> CreateAsync(ITrackedConnection connection)
         {
-            SupportedDatabase.SqlServer => 2100,
-            SupportedDatabase.Sqlite => 999,
-            SupportedDatabase.MySql => 65535,
-            SupportedDatabase.MariaDb => 65535,
-            SupportedDatabase.PostgreSql => 65535,
-            SupportedDatabase.CockroachDb => 65535,
-            SupportedDatabase.Oracle => 1000,
-            SupportedDatabase.Firebird => 1499,
-            //SupportedDatabase.Db2 => 32767,
-            _ => 999
-        };
-    }
+            return CreateInternalAsync(connection);
+        }
 
-    public DataTable GetSchema(ITrackedConnection connection)
-    {
-        try
+        private static async Task<DataSourceInformation> CreateInternalAsync(ITrackedConnection connection)
         {
-            if (!isSqlite(connection)) return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+            var info = new DataSourceInformation();
+            await info.InitializeInternalAsync(connection).ConfigureAwait(false);
+            return info;
+        }
 
+        private void InitializeSync(ITrackedConnection connection)
+        {
+            InitializeInternalAsync(connection).GetAwaiter().GetResult();
+        }
 
-            var dt = BuildEmptySchema(
-                "Sqlite",
-                "3.40.1",
-                "@p[0-9]+",
-                "@{0}",
-                64,
-                @"@\\w+",
-                null,
-                true);
+        private async Task InitializeInternalAsync(ITrackedConnection connection)
+        {
+            var schema = await GetSchemaAsync(connection).ConfigureAwait(false);
+            var rawName = schema.Rows[0].Field<string>("DataSourceProductName") ?? string.Empty;
 
-            Product = SupportedDatabase.Sqlite;
+            var initial = InferDatabaseProduct(rawName);
+            VersionQueries.TryGetValue(initial, out var versionSql);
+
+            var version = string.IsNullOrEmpty(versionSql)
+                ? "Unknown Version"
+                : await GetVersionAsync(connection, versionSql).ConfigureAwait(false);
+
+            DatabaseProductVersion = version;
+            DatabaseProductName = version;
+
+            var final = InferDatabaseProduct(version);
+            Product = final != SupportedDatabase.Unknown ? final : initial;
+            schema.TableName = ((schema.TableName?.Length < 1) ? Product.ToString() : schema.TableName);
+            schema.WriteXml($"{Product}.schema.xml", XmlWriteMode.WriteSchema);
+
+            ApplySchema(schema);
+            PrepareStatements = false;
+        }
+
+        private static async Task<string> GetVersionAsync(ITrackedConnection connection, string versionSql)
+        {
+            var result = await ExecuteScalarViaReaderAsync(connection, versionSql).ConfigureAwait(false);
+            return result?.ToString() ?? "Unknown Version";
+        }
+
+        private void ApplySchema(DataTable schema)
+        {
+            var row = schema.Rows[0];
+
+            ParameterMarkerPattern = GetField<string>(row, "ParameterMarkerPattern", string.Empty);
+            ParameterNameMaxLength = GetField<int>(row, "ParameterNameMaxLength", 0);
+            SupportsNamedParameters = GetField<bool>(row, "SupportsNamedParameters", false);
+            ParameterMarker = DefaultMarkers.GetValueOrDefault(Product, "?");
+            SupportsNamedParameters |= ParameterMarker != "?";
+            ProcWrappingStyle = ProcWrapStyles.GetValueOrDefault(Product, ProcWrappingStyle.None);
+            MaxParameterLimit = MaxParameterLimits.GetValueOrDefault(Product, 999);
+        }
+
+        public string GetDatabaseVersion(ITrackedConnection connection)
+        {
+            try
+            {
+                var versionQuery = Product switch
+                {
+                    SupportedDatabase.SqlServer => "SELECT @@VERSION",
+                    SupportedDatabase.MySql => "SELECT VERSION()",
+                    SupportedDatabase.MariaDb => "SELECT VERSION()",
+                    SupportedDatabase.PostgreSql => "SELECT version()",
+                    SupportedDatabase.CockroachDb => "SELECT version()",
+                    SupportedDatabase.Oracle => @"SELECT * FROM v$version",
+                    SupportedDatabase.Sqlite => "SELECT sqlite_version()",
+                    SupportedDatabase.Firebird => "SELECT rdb$get_context('SYSTEM','ENGINE_VERSION') FROM rdb$database",
+                    _ => string.Empty
+                };
+
+                if (string.IsNullOrWhiteSpace(versionQuery))
+                {
+                    return "Unknown Database Version";
+                }
+
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = versionQuery;
+                var version = cmd.ExecuteScalar()?.ToString();
+                return version ?? "Unknown Version";
+            }
+            catch (Exception ex)
+            {
+                return "Error retrieving version: " + ex.Message;
+            }
+        }
+
+        public DataTable GetSchema(ITrackedConnection connection)
+        {
+            if (IsSqliteSync(connection))
+            {
+                return ReadSqliteSchema();
+            }
+
+            return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+        }
+
+        private static DataTable ReadSqliteSchema()
+        {
+            var resourceName = $"pengdows.crud.xml.{SupportedDatabase.Sqlite}.schema.xml";
+
+            using var stream = typeof(DataSourceInformation).Assembly
+                                   .GetManifestResourceStream(resourceName)
+                               ?? throw new FileNotFoundException($"Embedded schema not found: {resourceName}");
+
+            var table = new DataTable();
+            table.ReadXml(stream);
+            return table;
+        }
+
+        private static async Task<DataTable> GetSchemaAsync(ITrackedConnection connection)
+        {
+            if (await IsSqliteAsync(connection).ConfigureAwait(false))
+            {
+                return ReadSqliteSchema();
+            }
+
+            return connection.GetSchema(DbMetaDataCollectionNames.DataSourceInformation);
+        }
+
+        private static async Task<object?> ExecuteScalarViaReaderAsync(ITrackedConnection connection, string sql)
+        {
+            try
+            {
+                await using var cmd = (DbCommand)connection.CreateCommand();
+                cmd.CommandText = sql;
+                await using var reader = await cmd
+                    .ExecuteReaderAsync(CommandBehavior.SingleRow | CommandBehavior.SingleResult).ConfigureAwait(false);
+
+                if (await reader.ReadAsync().ConfigureAwait(false))
+                {
+                    return reader.GetValue(0);
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                throw;
+            }
+        }
+
+        private static async Task<bool> IsSqliteAsync(ITrackedConnection connection)
+        {
+            try
+            {
+                var result = await ExecuteScalarViaReaderAsync(connection, "SELECT sqlite_version()")
+                    .ConfigureAwait(false);
+                return result != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsSqliteSync(ITrackedConnection connection)
+        {
+            try
+            {
+                using var cmd = (DbCommand)connection.CreateCommand();
+                cmd.CommandText = "SELECT sqlite_version()";
+                using var reader = cmd.ExecuteReader(CommandBehavior.SingleRow);
+
+                return reader.Read();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static DataTable BuildEmptySchema(
+            string productName,
+            string productVersion,
+            string parameterMarkerPattern,
+            string parameterMarkerFormat,
+            int parameterNameMaxLength,
+            string parameterNamePattern,
+            string parameterNamePatternRegex,
+            bool supportsNamedParameters)
+        {
+            var dt = new DataTable();
+            dt.Columns.Add("DataSourceProductName", typeof(string));
+            dt.Columns.Add("DataSourceProductVersion", typeof(string));
+            dt.Columns.Add("ParameterMarkerPattern", typeof(string));
+            dt.Columns.Add("ParameterMarkerFormat", typeof(string));
+            dt.Columns.Add("ParameterNameMaxLength", typeof(int));
+            dt.Columns.Add("ParameterNamePattern", typeof(string));
+            dt.Columns.Add("ParameterNamePatternRegex", typeof(string));
+            dt.Columns.Add("SupportsNamedParameters", typeof(bool));
+
+            dt.Rows.Add(
+                productName,
+                productVersion,
+                parameterMarkerPattern,
+                parameterMarkerFormat,
+                parameterNameMaxLength,
+                parameterNamePattern,
+                parameterNamePatternRegex,
+                supportsNamedParameters
+            );
+
             return dt;
         }
-        catch (Exception ex)
-        {
-            //
 
-            var dt = BuildEmptySchema();
-            Product = SupportedDatabase.Unknown;
-            return dt;
+        private static SupportedDatabase InferDatabaseProduct(string name)
+        {
+            var lower = name?.ToLowerInvariant() ?? string.Empty;
+
+            if (lower.Contains("sql server")) return SupportedDatabase.SqlServer;
+            if (lower.Contains("sybase") || lower.Contains("adaptive server")) return SupportedDatabase.Sybase;
+            if (lower.Contains("mariadb")) return SupportedDatabase.MariaDb;
+            if (lower.Contains("mysql")) return SupportedDatabase.MySql;
+            if (lower.Contains("cockroach")) return SupportedDatabase.CockroachDb;
+            if (lower.Contains("npgsql")) return SupportedDatabase.PostgreSql;
+            if (lower.Contains("postgres")) return SupportedDatabase.PostgreSql;
+            if (lower.Contains("oracle")) return SupportedDatabase.Oracle;
+            if (lower.Contains("sqlite")) return SupportedDatabase.Sqlite;
+            if (lower.Contains("firebird")) return SupportedDatabase.Firebird;
+
+            return SupportedDatabase.Unknown;
         }
-    }
 
-    private static DataTable BuildEmptySchema(
-        string productName = "Unknown",
-        string productVersion = "Unknown",
-        string parameterMarkerPattern = "?",
-        string parameterMarkerFormat = "?",
-        int parameterNameMaxLength = 0,
-        string parameterNamePattern = @"@\\w+",
-        string parameterNamePatternRegex = @"[@:]\w+",
-        bool supportsNamedParameters = false
-    )
-    {
-        var dt = new DataTable();
-        dt.Columns.Add("DataSourceProductName", typeof(string));
-        dt.Columns.Add("DataSourceProductVersion", typeof(string));
-        dt.Columns.Add("ParameterMarkerPattern", typeof(string));
-        dt.Columns.Add("ParameterMarkerFormat", typeof(string));
-        dt.Columns.Add("ParameterNameMaxLength", typeof(int));
-        dt.Columns.Add("ParameterNamePattern", typeof(string));
-        dt.Columns.Add("ParameterNamePatternRegex", typeof(string)); // ✅ added column
-        dt.Columns.Add("SupportsNamedParameters", typeof(bool));
-        dt.Rows.Add(
-            productName,
-            productVersion,
-            parameterMarkerPattern,
-            parameterMarkerFormat,
-            parameterNameMaxLength,
-            parameterNamePattern,
-            parameterNamePatternRegex, // ✅ added value
-            supportsNamedParameters
-        );
-        return dt;
-    }
-
-    private bool isSqlite(ITrackedConnection connection)
-    {
-        try
+        public bool SupportsMerge => Product switch
         {
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT sqlite_version()";
-            var version = cmd.ExecuteScalar()?.ToString();
-            return version != null;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
-
-    private string ExtractParameterMarker()
-    {
-        // var tmp = ParameterMarker.Replace("{0}", "");
-        // if (!string.IsNullOrWhiteSpace(tmp))
-        //     return tmp;
-        //
-        // if (!String.IsNullOrWhiteSpace(ParameterMarkerPattern))
-        // {
-        //     tmp = ParameterMarkerPattern.Substring(0, 1);
-        //     if (!string.IsNullOrWhiteSpace(tmp))
-        //         return tmp;
-        // }
-
-        switch (Product)
-        {
-            case SupportedDatabase.Firebird:
-            case SupportedDatabase.SqlServer:
-            case SupportedDatabase.MySql:
-            case SupportedDatabase.MariaDb:
-            case SupportedDatabase.Sqlite:
-                return "@";
-            case SupportedDatabase.PostgreSql:
-            case SupportedDatabase.CockroachDb:
-            case SupportedDatabase.Oracle:
-                return ":";
-            default:
-                return "?";
-        }
-    }
-
-    private void SetupStoredProcWrap()
-    {
-        ProcWrappingStyle = Product switch
-        {
-            SupportedDatabase.SqlServer => ProcWrappingStyle.Exec,
-            SupportedDatabase.Oracle => ProcWrappingStyle.Oracle,
-            SupportedDatabase.MySql => ProcWrappingStyle.Call,
-            SupportedDatabase.MariaDb => ProcWrappingStyle.Call,
-            //SupportedDatabase.Db2 => ProcWrappingStyle.Call,
-            SupportedDatabase.PostgreSql => ProcWrappingStyle.PostgreSQL,
-            SupportedDatabase.CockroachDb => ProcWrappingStyle.PostgreSQL,
-            SupportedDatabase.Firebird => ProcWrappingStyle.ExecuteProcedure,
-            _ => ProcWrappingStyle.None
+            SupportedDatabase.SqlServer => true,
+            SupportedDatabase.Sybase => false,
+            SupportedDatabase.Oracle => true,
+            SupportedDatabase.Firebird => true,
+            _ => false
         };
-    }
 
-    private void InferQuoteCharacters()
-    {
-        // (QuotePrefix, QuoteSuffix) = Product switch
-        // {
-        //     SupportedDatabase.MySql => ("`", "`"),
-        //     SupportedDatabase.MariaDb => ("`", "`"),
-        //     SupportedDatabase.SqlServer => ("[", "]"),
-        //     _ => ("\"", "\"")
-        // };
-        //In DatabaseContext.SetupConnectionSessionSettingsForProvider,
-        //we are now setting session settings in maria/mysql to use doublequotes for identifiers
-        //and apostrophes for string literals, like standard sql databases.
-        //MS-sql is also getting QUOTED_IDENTIFIERS set to ON  in CheckForSqlServerSettings
-        QuotePrefix = QuoteSuffix = "\"";
-    }
-
-    private T GetColumnValue<T>(DataRow row, string columnName, T defaultValue = default)
-    {
-        try
+        public bool SupportsInsertOnConflict => Product switch
         {
-            var value = row[columnName];
-            if (Utils.IsNullOrDbNull(value))
+            SupportedDatabase.PostgreSql => true,
+            SupportedDatabase.CockroachDb => true,
+            SupportedDatabase.Sqlite => true,
+            SupportedDatabase.MySql => true,
+            SupportedDatabase.MariaDb => true,
+            _ => false
+        };
+
+        public bool RequiresStoredProcParameterNameMatch => Product switch
+        {
+            SupportedDatabase.Oracle => true,
+            SupportedDatabase.PostgreSql => true,
+            SupportedDatabase.CockroachDb => true,
+            _ => false
+        };
+
+        private T GetField<T>(DataRow row, string columnName, T defaultValue)
+        {
+            try
+            {
+                return row.Field<T>(columnName);
+            }
+            catch
             {
                 return defaultValue;
             }
-
-            return (T)Convert.ChangeType(value, typeof(T));
-        }
-        catch
-        {
-            return defaultValue;
         }
     }
-
-    private bool TestPrepareCommand(ITrackedConnection conn)
-    {
-        try
-        {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT 1 WHERE 1=1";
-            cmd.CommandType = CommandType.Text;
-            cmd.Prepare();
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private SupportedDatabase InferDatabaseProduct(string productName)
-    {
-        var name = productName?.ToLowerInvariant() ?? string.Empty;
-        if (name.Contains("sql server")) return SupportedDatabase.SqlServer;
-        if (name.Contains("mariadb")) return SupportedDatabase.MariaDb;
-        if (name.Contains("mysql")) return SupportedDatabase.MySql;
-        if (name.Contains("cockroach")) return SupportedDatabase.CockroachDb;
-        if (name.Contains("postgres") || name.Contains("npgsql")) return SupportedDatabase.PostgreSql;
-        if (name.Contains("oracle")) return SupportedDatabase.Oracle;
-        if (name.Contains("sqlite")) return SupportedDatabase.Sqlite;
-        if (name.Contains("firebird")) return SupportedDatabase.Firebird;
-        //if (name.Contains("db2")) return SupportedDatabase.Db2;
-        return SupportedDatabase.Unknown;
-    }
-
-    /// <summary>
-    /// Indicates whether stored procedure parameter names must match the declared names in the database.
-    /// This is true for Oracle, PostgreSQL, and CockroachDB when using named binding.
-    /// </summary>
-    public bool RequiresStoredProcParameterNameMatch => Product switch
-    {
-        SupportedDatabase.Oracle => true,
-        SupportedDatabase.PostgreSql => true,
-        SupportedDatabase.CockroachDb => true,
-        _ => false // Others allow positional binding with arbitrary names
-    };
 }
