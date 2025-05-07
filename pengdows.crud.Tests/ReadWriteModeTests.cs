@@ -1,14 +1,32 @@
+using System;
+using pengdows.crud.enums;
 using Xunit;
 
 namespace pengdows.crud.Tests
 {
     public class ReadWriteModeTests
     {
-        [Fact]
-        public void PlaceholderTest()
+        [Theory]
+        [InlineData("ReadOnly", ReadWriteMode.ReadOnly)]
+        [InlineData("ReadWrite", ReadWriteMode.ReadWrite)]
+        [InlineData("WriteOnly", ReadWriteMode.WriteOnly)]
+        public void EnumParse_ShouldReturnCorrectValue(string input, ReadWriteMode expected)
         {
-            // TODO: Implement tests for ReadWriteMode.cs
-            Assert.True(true);
+            var result = Enum.Parse<ReadWriteMode>(input, ignoreCase: true);
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void ReadWriteModeEnumParse_InvalidValue_ShouldThrow()
+        {
+            Assert.Throws<ArgumentException>(() => Enum.Parse<ReadWriteMode>("NotAReadWriteMode"));
+        }
+
+        [Fact]
+        public void ReadWriteMode_ShouldContainExpectedValues()
+        {
+            var names = Enum.GetNames(typeof(ReadWriteMode));
+            Assert.Equal(new[] {"ReadOnly", "WriteOnly", "ReadWrite"}, names);
         }
     }
 }

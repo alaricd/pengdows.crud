@@ -24,4 +24,7 @@
     <ItemGroup>
       <EmbeddedResource Include="xml\Sqlite.schema.xml" />
     </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="pengdows.crud.Tests" />
+    </ItemGroup>
 </Project>
