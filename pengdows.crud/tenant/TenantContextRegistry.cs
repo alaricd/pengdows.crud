@@ -1,21 +1,27 @@
 using System.Collections.Concurrent;
 using System.Data.Common;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace pengdows.crud.tenant;
 
 public class TenantContextRegistry : ITenantContextRegistry
 {
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ITenantConnectionResolver _resolver;
     private readonly IServiceProvider _serviceProvider;
     private readonly ConcurrentDictionary<string, IDatabaseContext> _contexts = new();
 
-    public TenantContextRegistry(ITenantConnectionResolver resolver, IServiceProvider serviceProvider)
+    public TenantContextRegistry(
+        IServiceProvider serviceProvider,
+        ITenantConnectionResolver resolver,
+        ILoggerFactory loggerFactory)
     {
-        _resolver = resolver;
         _serviceProvider = serviceProvider;
+        _resolver = resolver;
+        _loggerFactory = loggerFactory;
     }
-
+    
     public IDatabaseContext GetContext(string tenant)
     {
         return _contexts.GetOrAdd(tenant, CreateDatabaseContext);
@@ -23,11 +29,10 @@ public class TenantContextRegistry : ITenantContextRegistry
 
     private IDatabaseContext CreateDatabaseContext(string tenant)
     {
-        var tenantInfo = _resolver.GetTenantInfo(tenant); // contains connection string + SupportedDatabase
+        var config = _resolver.GetDatabaseContextConfiguration(tenant); // contains connection string + SupportedDatabase
 
-        var factory = _serviceProvider.GetKeyedService<DbProviderFactory>(tenantInfo.DatabaseType)
-                      ?? throw new InvalidOperationException($"No factory registered for {tenantInfo.DatabaseType}");
-
-        return new DatabaseContext(tenantInfo.ConnectionString, factory);
+        var factory = _serviceProvider.GetKeyedService<DbProviderFactory>(config.ProviderName)
+                      ?? throw new InvalidOperationException($"No factory registered for {config.ProviderName}");
+        return new DatabaseContext(config, factory, _loggerFactory);
     }
 }

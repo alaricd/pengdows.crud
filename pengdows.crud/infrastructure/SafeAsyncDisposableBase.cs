@@ -3,12 +3,11 @@ namespace pengdows.crud.infrastructure;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-
 public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
 {
     private int _disposed;
 
-    public bool IsDisposed => Interlocked.CompareExchange(ref _disposed, 0, 0) != 0;
+    public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     public void Dispose()
     {
@@ -24,7 +23,7 @@ public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
         }
         catch
         {
-            // optionally log
+            // optional log
         }
 
         GC.SuppressFinalize(this);
@@ -44,16 +43,13 @@ public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
         }
         catch
         {
-            // optionally log
+            // optional log
         }
 
         GC.SuppressFinalize(this);
     }
 
-    protected virtual void DisposeManaged()
-    {
-        // sync fallback
-    }
+    protected virtual void DisposeManaged() { }
 
     protected virtual async ValueTask DisposeManagedAsync()
     {
@@ -61,8 +57,5 @@ public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
         await Task.CompletedTask;
     }
 
-    protected virtual void DisposeUnmanaged()
-    {
-        // for unmanaged handle cleanup if needed
-    }
+    protected virtual void DisposeUnmanaged() { }
 }

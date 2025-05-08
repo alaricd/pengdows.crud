@@ -6,13 +6,14 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using pengdows.crud.enums;
+using pengdows.crud.infrastructure;
 using pengdows.crud.wrappers;
 
 #endregion
 
 namespace pengdows.crud;
 
-public class SqlContainer : ISqlContainer
+public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
 {
     private readonly IDatabaseContext _context;
 
@@ -168,11 +169,6 @@ public class SqlContainer : ISqlContainer
         }
     }
 
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     public DbCommand CreateCommand(ITrackedConnection conn)
     {
@@ -318,28 +314,11 @@ public class SqlContainer : ISqlContainer
 
     public string MakaParameterName(DbParameter parameter) => _context.MakeParameterName(parameter);
 
-    private void Dispose(bool disposing)
+    protected override void DisposeManaged()
     {
-        if (_disposed)
-            return;
+        // Dispose managed resources here (clear parameters and query)
 
-        if (disposing)
-        {
-            // Dispose managed resources here (clear parameters and query)
-
-            _parameters.Clear();
-            Query.Clear();
-        }
-
-        // Clean up unmanaged resources if necessary (though there may be none in your case)
-
-        _disposed = true;
-    }
-
-
-    public async ValueTask DisposeAsync()
-    {
-        Dispose();
-        await Task.CompletedTask;
+        _parameters.Clear();
+        Query.Clear();
     }
 }

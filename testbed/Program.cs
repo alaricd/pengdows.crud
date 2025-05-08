@@ -4,8 +4,6 @@
 using System.Data.Common;
 using AdoNetCore.AseClient;
 using FirebirdSql.Data.FirebirdClient;
-using Microsoft.Data.SqlClient;
-using Microsoft.Data.SqlClient.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,7 +11,11 @@ using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
 using testbed;
 using testbed.Cockroach;
-using testbed.Sybase;
+
+foreach (var (assembly, type, factory) in DbProviderFactoryFinder.FindAllFactories())
+{
+    Console.WriteLine($"Found: {type} in {assembly}");
+}
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddScoped<IAuditContextProvider<string>, StringAuditContextProvider>();

@@ -79,4 +79,16 @@ public class TransactionContextTests
 
         Assert.True(char.IsLetter(name[0]));
     }
+
+    [Theory]
+    [MemberData(nameof(AllSupportedProviders))]
+    public void NestedTransactionsFail(SupportedDatabase product)
+    {
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}",
+            new FakeDbFactory(product.ToString()));
+        using var tx = context.BeginTransaction();
+        var name = tx.GenerateRandomName(10);
+        Assert.Throws<InvalidOperationException>(() => tx.BeginTransaction(null));
+        Assert.True(char.IsLetter(name[0]));
+    }
 }

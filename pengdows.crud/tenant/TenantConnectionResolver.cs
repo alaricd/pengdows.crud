@@ -1,14 +1,41 @@
+using System.Collections.Concurrent;
+using pengdows.crud.configuration;
+
 namespace pengdows.crud.tenant;
 
 public class TenantConnectionResolver : ITenantConnectionResolver
 {
-    public string GetConnectionString(string name)
+    public static ITenantConnectionResolver Instance { get; } = new TenantConnectionResolver();
+
+    private static readonly ConcurrentDictionary<string, DatabaseContextConfiguration> _configurations = new();
+
+    public IDatabaseContextConfiguration GetDatabaseContextConfiguration(string tenant)
     {
-        throw new NotImplementedException();
+        if (string.IsNullOrWhiteSpace(tenant))
+        {
+            throw new ArgumentNullException(nameof(tenant), "Tenant ID must not be null or empty.");
+        }
+
+        if (!_configurations.TryGetValue(tenant, out var config))
+        {
+            throw new InvalidOperationException($"No database configuration registered for tenant '{tenant}'.");
+        }
+
+        return config;
     }
 
-    public ITenantInformation GetTenantInfo(string tenant)
+    public static void Register(string tenant, DatabaseContextConfiguration configuration)
     {
-        throw new NotImplementedException();
+        if (string.IsNullOrWhiteSpace(tenant))
+        {
+            throw new ArgumentNullException(nameof(tenant));
+        }
+
+        if (configuration == null)
+        {
+            throw new ArgumentNullException(nameof(configuration));
+        }
+
+        _configurations[tenant] = configuration;
     }
 }

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace pengdows.crud.configuration;
 
-public class DbProviderLoader:IDbProviderLoader
+public class DbProviderLoader : IDbProviderLoader
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<DbProviderLoader> _logger;
@@ -27,7 +27,7 @@ public class DbProviderLoader:IDbProviderLoader
         foreach (var kvp in providers)
         {
             var providerKey = kvp.Key;
-            
+
             if (string.IsNullOrEmpty(providerKey))
             {
                 throw new InvalidOperationException($"ProviderName is missing for provider '{providerKey}'.");
@@ -48,7 +48,8 @@ public class DbProviderLoader:IDbProviderLoader
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to register provider '{ProviderKey}' with DbProviderFactories", providerKey);
+                _logger.LogError(ex, "Failed to register provider '{ProviderKey}' with DbProviderFactories",
+                    providerKey);
                 throw new InvalidOperationException(
                     $"Failed to register DbProviderFactory for provider '{kvp.Key}' with provider name  '{kvp.Value.ProviderName}'.",
                     ex
@@ -66,7 +67,7 @@ public class DbProviderLoader:IDbProviderLoader
             var fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, config.AssemblyPath);
             if (!File.Exists(fullPath))
             {
-                _logger.LogError("Assembly file '{FullPath}' for provider '{ProviderKey}' does not exist", fullPath,  
+                _logger.LogError("Assembly file '{FullPath}' for provider '{ProviderKey}' does not exist", fullPath,
                     providerKey);
                 throw new InvalidOperationException(
                     $"Assembly file '{fullPath}' for provider '{providerKey}' does not exist."
@@ -81,12 +82,12 @@ public class DbProviderLoader:IDbProviderLoader
                     {
                         providerAssembly = Assembly.LoadFrom(fullPath);
                         _loadedAssemblies[fullPath] = providerAssembly;
-                        _logger.LogInformation("Loaded assembly from '{FullPath}' for provider '{ProviderKey}'",  
+                        _logger.LogInformation("Loaded assembly from '{FullPath}' for provider '{ProviderKey}'",
                             fullPath, providerKey);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to load assembly '{FullPath}' for provider '{ProviderKey}'",  
+                        _logger.LogError(ex, "Failed to load assembly '{FullPath}' for provider '{ProviderKey}'",
                             fullPath, providerKey);
                         throw new InvalidOperationException(
                             $"Failed to load assembly '{fullPath}' for provider '{providerKey}'.",
@@ -106,12 +107,12 @@ public class DbProviderLoader:IDbProviderLoader
                     {
                         providerAssembly = Assembly.Load(config.AssemblyName);
                         _loadedAssemblies[config.AssemblyName] = providerAssembly;
-                        _logger.LogInformation("Loaded assembly '{AssemblyName}' for provider '{ProviderKey}'",  
-                            config. AssemblyName, providerKey);
+                        _logger.LogInformation("Loaded assembly '{AssemblyName}' for provider '{ProviderKey}'",
+                            config.AssemblyName, providerKey);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to load assembly '{AssemblyName}' for provider '{ProviderKey}'",  
+                        _logger.LogError(ex, "Failed to load assembly '{AssemblyName}' for provider '{ProviderKey}'",
                             config.AssemblyName, providerKey);
                         throw new InvalidOperationException(
                             $"Failed to load assembly '{config.AssemblyName}' for provider '{providerKey}'.",
@@ -187,6 +188,4 @@ public class DbProviderLoader:IDbProviderLoader
             );
         }
     }
-
-
 }
