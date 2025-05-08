@@ -21,17 +21,16 @@
     </ItemGroup>
 
     <ItemGroup>
-<<<<<<< Updated upstream
+
         <ProjectReference Include="..\pengdows.crud.fakeDb\pengdows.crud.fakeDb.csproj" />
-        <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj" />
+       
+        <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj"/>
+        <ProjectReference Include="..\testbed\testbed.csproj" />
+
     </ItemGroup>
 
     <ItemGroup>
       <Folder Include="Mocks\" />
-=======
-        <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj"/>
-        <ProjectReference Include="..\testbed\testbed.csproj" />
->>>>>>> Stashed changes
     </ItemGroup>
 
 </Project>
