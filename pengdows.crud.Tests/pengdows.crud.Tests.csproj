@@ -8,6 +8,10 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <ExcludeByAttribute>ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
+    </PropertyGroup>
+
     <ItemGroup>
         <PackageReference Include="JetBrains.Annotations" Version="2025.1.0-eap1" />
         <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.4" />
@@ -21,7 +25,6 @@
     </ItemGroup>
 
     <ItemGroup>
-
         <ProjectReference Include="..\pengdows.crud.fakeDb\pengdows.crud.fakeDb.csproj" />
        
         <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj"/>
@@ -31,6 +34,8 @@
 
     <ItemGroup>
       <Folder Include="Mocks\" />
+        <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj"/>
+        <ProjectReference Include="..\testbed\testbed.csproj" />
     </ItemGroup>
 
 </Project>

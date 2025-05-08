@@ -16,6 +16,7 @@ namespace pengdows.crud.Tests
         [InlineData("Sqlite", SupportedDatabase.Sqlite)]
         [InlineData("SqlServer", SupportedDatabase.SqlServer)]
         [InlineData("Unknown", SupportedDatabase.Unknown)]
+        [InlineData("Sybase", SupportedDatabase.Sybase)]
         public void EnumParse_ShouldReturnCorrectValue(string input, SupportedDatabase expected)
         {
             var result = Enum.Parse<SupportedDatabase>(input, ignoreCase: true);
@@ -32,7 +33,7 @@ namespace pengdows.crud.Tests
         public void SupportedDatabase_ShouldContainExpectedValues()
         {
             var names = Enum.GetNames(typeof(SupportedDatabase));
-            Assert.Equal(new[] {"Unknown", "SqlServer", "MySql", "PostgreSql", "Oracle", "Sqlite", "Firebird", "CockroachDb", "MariaDb"}, names);
+            Assert.Equal(new[] {"Unknown", "SqlServer", "MySql", "PostgreSql", "Oracle", "Sqlite", "Firebird", "CockroachDb", "MariaDb", "Sybase"}, names);
         }
     }
 }

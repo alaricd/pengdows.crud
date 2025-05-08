@@ -1,7 +1,10 @@
 using System;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using pengdows.crud.attributes;
 
+
+[ExcludeFromCodeCoverage]
 [Table("test_table")]
 public class TestTable
 {
