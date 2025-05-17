@@ -21,22 +21,18 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
     private static readonly ConcurrentDictionary<PropertyInfo, Action<object, object?>> _propertySetters = new();
     private readonly IDatabaseContext _context;
     private readonly IColumnInfo? _idColumn;
-    private readonly IServiceProvider _serviceProvider;
+   // private readonly IServiceProvider _serviceProvider;
     private readonly ITableInfo _tableInfo;
 
     private readonly IColumnInfo? _versionColumn;
     private readonly Type? _userFieldType = null;
 
     public EntityHelper(IDatabaseContext databaseContext,
-        IServiceProvider serviceProvider,
         EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
     )
     {
         _context = databaseContext;
-        _serviceProvider = serviceProvider;
-        var typemap = serviceProvider?.GetService<ITypeMapRegistry>() ?? new TypeMapRegistry();
-
-        _tableInfo = typemap.GetTableInfo<TEntity>() ??
+        _tableInfo = _context.TypeMapRegistry.GetTableInfo<TEntity>() ??
                      throw new InvalidOperationException($"Type {typeof(TEntity).FullName} is not a table.");
         var propertyInfoPropertyType = _tableInfo.Columns
             .Values
@@ -44,8 +40,37 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
                 c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
                 c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
             )?.PropertyInfo.PropertyType;
-        if (propertyInfoPropertyType != null && _serviceProvider != null)
+        if (propertyInfoPropertyType != null)
         {
+            _userFieldType = propertyInfoPropertyType;
+        }
+
+        WrappedTableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
+                               ? WrapObjectName(_tableInfo.Schema) +
+                                 _context.CompositeIdentifierSeparator
+                               : "")
+                           + WrapObjectName(_tableInfo.Name);
+        _idColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsId);
+        _versionColumn = _tableInfo.Columns.Values.FirstOrDefault(itm => itm.IsVersion);
+        EnumParseBehavior = enumParseBehavior;
+    }
+
+    [Obsolete("Use the constructor without IServiceProvider instead")]
+    public EntityHelper(IDatabaseContext databaseContext,
+        IServiceProvider serviceProvider,
+        EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
+    )
+    {
+        _context = databaseContext;
+        _tableInfo = _context.TypeMapRegistry.GetTableInfo<TEntity>() ??
+                     throw new InvalidOperationException($"Type {typeof(TEntity).FullName} is not a table.");
+        var propertyInfoPropertyType = _tableInfo.Columns
+            .Values
+            .FirstOrDefault(c =>
+                c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
+                c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
+            )?.PropertyInfo.PropertyType;
+        if (propertyInfoPropertyType != null ) {
             _userFieldType = propertyInfoPropertyType;
         }
 
@@ -554,10 +579,10 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
 
     private void SetAuditFields(TEntity obj, bool updateOnly)
     {
-        if (_userFieldType == null || _serviceProvider == null || obj == null)
+        if (_userFieldType == null ||   obj == null)
             return;
 
-        var (userId, now) = AuditFieldResolver.ResolveFrom(_userFieldType, _serviceProvider);
+        var (userId, now) = AuditFieldResolver.ResolveFrom(_userFieldType);
 
         // Always update last-modified
         _tableInfo.LastUpdatedBy?.PropertyInfo?.SetValue(obj, userId);

@@ -18,6 +18,7 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
         // _connection.Open();
         base.TypeMap.Register<TestEntity>();
         this.entityHelper = new EntityHelper<TestEntity, int>(Context, null);
+        
         Assert.Equal(DbMode.SingleConnection, Context.ConnectionMode);
         BuildTestTable();
     }
@@ -71,6 +72,10 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
             @"CREATE TABLE IF NOT EXISTS
 {0}Test{1} ({0}Id{1} INTEGER PRIMARY KEY, 
 {0}Name{1} TEXT UNIQUE NOT NULL,
+    {0}CreatedBy{1} TEXT NOT NULL DEFAULT 'system',
+    {0}CreatedOn{1} TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    {0}LastUpdatedBy{1} TEXT NOT NULL DEFAULT 'system',
+    {0}LastUpdatedOn{1} TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
 {0}Version{1} INTEGER NOT NULL DEFAULT 0)", qp, qs);
         var container = Context.CreateSqlContainer(sql);
         await container.ExecuteNonQueryAsync();

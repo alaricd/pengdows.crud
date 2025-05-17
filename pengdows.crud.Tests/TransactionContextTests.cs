@@ -46,7 +46,7 @@ public class TransactionContextTests
     [Fact]
     public void Commit_SetsCommittedState()
     {
-        var tx = new TransactionContext(CreateContext("sqlLite"));
+        var tx = new TransactionContext(CreateContext(SupportedDatabase.Sqlite));
         tx.Commit();
 
         Assert.True(tx.WasCommitted);

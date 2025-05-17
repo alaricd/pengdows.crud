@@ -5,25 +5,17 @@ using Microsoft.Extensions.DependencyInjection;
 #endregion
 
 namespace pengdows.crud;
-
-public static class AuditFieldResolver
+public class AuditFieldResolver<TUserId>
 {
-    public static (object userId, DateTime utcNow) ResolveFrom(
-        Type userFieldType,
-        IServiceProvider services)
-    {
-        var providerType = typeof(IAuditContextProvider<>).MakeGenericType(userFieldType);
+    private readonly IAuditContextProvider<TUserId> _provider;
 
-        try
-        {
-            dynamic provider = services.GetRequiredService(providerType);
-            return (provider.GetCurrentUserIdentifier(), provider.GetUtcNow());
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new InvalidOperationException(
-                $"Audit provider for user type '{userFieldType.Name}' is missing. " +
-                $"Ensure IAuditContextProvider<{userFieldType.Name}> is registered with DI.", ex);
-        }
+    public AuditFieldResolver(IAuditContextProvider<TUserId> provider)
+    {
+        _provider = provider;
+    }
+
+    public (TUserId userId, DateTime utcNow) Resolve()
+    {
+        return (_provider.GetCurrentUserIdentifier(), _provider.GetUtcNow());
     }
 }

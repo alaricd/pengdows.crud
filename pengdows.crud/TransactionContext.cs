@@ -36,20 +36,37 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
 
     internal TransactionContext(IDatabaseContext context,
         IsolationLevel isolationLevel = IsolationLevel.Unspecified,
+        ExecutionType? executionType = null,
         ILogger<TransactionContext>? logger = null)
     {
         _logger = logger ?? new NullLogger<TransactionContext>();
         _context = context as DatabaseContext ?? throw new ArgumentNullException(nameof(context));
-
-        if (_context.Product == SupportedDatabase.CockroachDb)
+        if (executionType == null)
         {
-            isolationLevel = IsolationLevel.Serializable;
+            if (IsReadOnlyConnection)
+            {
+                executionType = ExecutionType.Read;
+            }
+            else
+            {
+                executionType = ExecutionType.Write;
+            }
         }
 
-        var executionType = GetExecutionAndSetIsolationTypes(ref isolationLevel);
-        IsolationLevel = isolationLevel;
+        if (IsReadOnlyConnection && executionType != ExecutionType.Read)
+        {
+            throw new NotSupportedException("DatabaseContext is read only");
+        }
+        
+        // if (_context.Product == SupportedDatabase.CockroachDb)
+        // {
+        //     isolationLevel = IsolationLevel.Serializable;
+        // }
 
-        _connection = _context.GetConnection(executionType, true);
+         //var executionType = GetExecutionAndSetIsolationTypes(ref isolationLevel);
+        // IsolationLevel = isolationLevel;
+
+        _connection = _context.GetConnection(executionType.Value, true);
         EnsureConnectionIsOpen();
         _semaphoreSlim = new SemaphoreSlim(1, 1);
 
@@ -58,34 +75,34 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
 
     public bool IsCompleted => Interlocked.CompareExchange(ref _completedState, 0, 0) != 0;
 
-    private ExecutionType GetExecutionAndSetIsolationTypes(ref IsolationLevel isolationLevel)
-    {
-        var executionType = ExecutionType.Write;
-        switch (_context.ReadWriteMode)
-        {
-            case ReadWriteMode.ReadWrite:
-            case ReadWriteMode.WriteOnly:
-                //leave the default "write" selection
-                if (isolationLevel < IsolationLevel.ReadCommitted)
-                {
-                    isolationLevel = IsolationLevel.ReadCommitted;
-                }
-
-                break;
-            case ReadWriteMode.ReadOnly:
-                executionType = ExecutionType.Read;
-                if (isolationLevel < IsolationLevel.RepeatableRead)
-                {
-                    isolationLevel = IsolationLevel.RepeatableRead;
-                }
-
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
-
-        return executionType;
-    }
+    // private ExecutionType GetExecutionAndSetIsolationTypes(ref IsolationLevel isolationLevel)
+    // {
+    //     var executionType = ExecutionType.Write;
+    //     switch (_context.ReadWriteMode)
+    //     {
+    //         case ReadWriteMode.ReadWrite:
+    //         case ReadWriteMode.WriteOnly:
+    //             //leave the default "write" selection
+    //             if (isolationLevel < IsolationLevel.ReadCommitted)
+    //             {
+    //                 isolationLevel = IsolationLevel.ReadCommitted;
+    //             }
+    //
+    //             break;
+    //         case ReadWriteMode.ReadOnly:
+    //             executionType = ExecutionType.Read;
+    //             if (isolationLevel < IsolationLevel.RepeatableRead)
+    //             {
+    //                 isolationLevel = IsolationLevel.RepeatableRead;
+    //             }
+    //
+    //             break;
+    //         default:
+    //             throw new ArgumentOutOfRangeException();
+    //     }
+    //
+    //     return executionType;
+    // }
 
     public IsolationLevel IsolationLevel { get; }
 

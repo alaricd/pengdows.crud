@@ -113,7 +113,6 @@ public static class PocoCompilerService
             SupportedDatabase.Oracle => MapOracle(type, precision, scale),
             SupportedDatabase.Sqlite => MapSqlite(type, precision, scale),
             SupportedDatabase.Firebird => MapFirebird(type, precision, scale),
-            SupportedDatabase.Sybase => MapSybase(type, precision, scale),
             _ => null
         };
     }
@@ -180,18 +179,6 @@ public static class PocoCompilerService
         "integer" => DbType.Int32,
         "bigint" => DbType.Int64,
         "varchar" or "char" => DbType.String,
-        "decimal" or "numeric" => MapDecimal(precision, scale),
-        _ => null
-    };
-
-    private static DbType? MapSybase(string type, int? precision, int? scale) => type switch
-    {
-        "int" => DbType.Int32,
-        "bigint" => DbType.Int64,
-        "smallint" => DbType.Int16,
-        "tinyint" => DbType.Byte,
-        "bit" => DbType.Boolean,
-        "varchar" or "text" => DbType.String,
         "decimal" or "numeric" => MapDecimal(precision, scale),
         _ => null
     };

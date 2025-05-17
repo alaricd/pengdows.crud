@@ -13,7 +13,6 @@ namespace pengdows.crud
         private static readonly Dictionary<SupportedDatabase, string> VersionQueries = new()
         {
             { SupportedDatabase.SqlServer, "SELECT @@VERSION" },
-            { SupportedDatabase.Sybase, "SELECT @@VERSION" },
             { SupportedDatabase.MySql, "SELECT VERSION()" },
             { SupportedDatabase.MariaDb, "SELECT VERSION()" },
             { SupportedDatabase.PostgreSql, "SELECT version()" },
@@ -26,7 +25,6 @@ namespace pengdows.crud
         private static readonly Dictionary<SupportedDatabase, int> MaxParameterLimits = new()
         {
             { SupportedDatabase.SqlServer, 2100 },
-            { SupportedDatabase.Sybase, 2100 },
             { SupportedDatabase.Sqlite, 999 },
             { SupportedDatabase.MySql, 65535 },
             { SupportedDatabase.MariaDb, 65535 },
@@ -39,7 +37,6 @@ namespace pengdows.crud
         private static readonly Dictionary<SupportedDatabase, ProcWrappingStyle> ProcWrapStyles = new()
         {
             { SupportedDatabase.SqlServer, ProcWrappingStyle.Exec },
-            { SupportedDatabase.Sybase, ProcWrappingStyle.Exec },
             { SupportedDatabase.Oracle, ProcWrappingStyle.Oracle },
             { SupportedDatabase.MySql, ProcWrappingStyle.Call },
             { SupportedDatabase.MariaDb, ProcWrappingStyle.Call },
@@ -52,7 +49,6 @@ namespace pengdows.crud
         {
             { SupportedDatabase.Firebird, "@" },
             { SupportedDatabase.SqlServer, "@" },
-            { SupportedDatabase.Sybase, "@" },
             { SupportedDatabase.MySql, "@" },
             { SupportedDatabase.MariaDb, "@" },
             { SupportedDatabase.Sqlite, "@" },
@@ -323,7 +319,6 @@ namespace pengdows.crud
             var lower = name?.ToLowerInvariant() ?? string.Empty;
 
             if (lower.Contains("sql server")) return SupportedDatabase.SqlServer;
-            if (lower.Contains("sybase") || lower.Contains("adaptive server")) return SupportedDatabase.Sybase;
             if (lower.Contains("mariadb")) return SupportedDatabase.MariaDb;
             if (lower.Contains("mysql")) return SupportedDatabase.MySql;
             if (lower.Contains("cockroach")) return SupportedDatabase.CockroachDb;
@@ -339,7 +334,6 @@ namespace pengdows.crud
         public bool SupportsMerge => Product switch
         {
             SupportedDatabase.SqlServer => true,
-            SupportedDatabase.Sybase => false,
             SupportedDatabase.Oracle => true,
             SupportedDatabase.Firebird => true,
             _ => false

@@ -104,7 +104,7 @@ public class DataSourceInformationTests
         // Assert: proc wrap style
         var expectedWrap = db switch
         {
-            SupportedDatabase.SqlServer or SupportedDatabase.Sybase => ProcWrappingStyle.Exec,
+            SupportedDatabase.SqlServer => ProcWrappingStyle.Exec,
             SupportedDatabase.Oracle => ProcWrappingStyle.Oracle,
             SupportedDatabase.MySql or SupportedDatabase.MariaDb => ProcWrappingStyle.Call,
             SupportedDatabase.PostgreSql or SupportedDatabase.CockroachDb => ProcWrappingStyle.PostgreSQL,
@@ -114,7 +114,7 @@ public class DataSourceInformationTests
         bool expectedRequiresStoredProcParameterNameMatch = db switch
         {
             SupportedDatabase.Firebird or SupportedDatabase.Sqlite or SupportedDatabase.SqlServer
-                or SupportedDatabase.Sybase or SupportedDatabase.MySql or SupportedDatabase.MariaDb => false,
+                 or SupportedDatabase.MySql or SupportedDatabase.MariaDb => false,
             SupportedDatabase.PostgreSql or SupportedDatabase.CockroachDb or SupportedDatabase.Oracle => true,
             _ => true
         };

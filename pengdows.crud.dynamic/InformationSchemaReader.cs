@@ -77,7 +77,6 @@ FROM {0}information_schema{1}.{0}columns{1}",
         switch (_context.Product)
         {
             case SupportedDatabase.SqlServer:
-            case SupportedDatabase.Sybase:
                 cmd.Query.Append($@"
 SELECT {0}table_schema{1}, {0}table_name{1} 
 FROM {0}information_schema{1}.{0}tables{1} 
@@ -143,7 +142,6 @@ WHERE {0}rdb$view_blr{1} IS NULL AND {0}rdb$system_flag{1} = 0");
         switch (_context.Product)
         {
             case SupportedDatabase.SqlServer:
-            case SupportedDatabase.Sybase:
             case SupportedDatabase.PostgreSql:
             case SupportedDatabase.CockroachDb:
             case SupportedDatabase.MySql:
