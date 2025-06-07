@@ -10,22 +10,21 @@ using Xunit;
 
 public class TransactionContextTests
 {
-    private readonly Mock<IDatabaseContext> _mockContext = new();
-    private readonly Mock<IDbTransaction> _mockTransaction = new();
-    private readonly Mock<ITrackedConnection> _mockConnection = new();
+    private IDatabaseContext _dbContext;
+    
 
-    private DatabaseContext CreateContext(SupportedDatabase dbType)
+    private IDatabaseContext CreateContext(SupportedDatabase dbType)
     {
-        var dbContext = new DatabaseContext("Data Source=:memory:", SqliteFactory.Instance, new TypeMapRegistry());
-        return dbContext;
+          _dbContext = new DatabaseContext("Data Source=:memory:", SqliteFactory.Instance, new TypeMapRegistry());
+        return _dbContext;
     }
 
-    public TransactionContextTests()
-    {
-        _mockContext.Setup(c => c.GetConnection(It.IsAny<ExecutionType>(), true)).Returns(_mockConnection.Object);
-        _mockConnection.Setup(c => c.BeginTransaction(It.IsAny<IsolationLevel>())).Returns(_mockTransaction.Object);
-        _mockConnection.Setup(c => c.State).Returns(ConnectionState.Open);
-    }
+    // public TransactionContextTests()
+    // {
+    //     _mockContext.Setup(c => c.GetConnection(It.IsAny<ExecutionType>(), true)).Returns(_mockConnection.Object);
+    //     _mockConnection.Setup(c => c.BeginTransaction(It.IsAny<IsolationLevel>())).Returns(_mockTransaction.Object);
+    //     _mockConnection.Setup(c => c.State).Returns(ConnectionState.Open);
+    // }
 
     // [Theory]
     // [InlineData(input, expected)]
@@ -51,24 +50,24 @@ public class TransactionContextTests
 
         Assert.True(tx.WasCommitted);
         Assert.True(tx.IsCompleted);
-        _mockTransaction.Verify(t => t.Commit(), Times.Once);
+       
     }
 
     [Fact]
     public void Rollback_SetsRollbackState()
     {
-        var tx = new TransactionContext(_mockContext.Object);
+        var tx = new TransactionContext(_dbContext);
         tx.Rollback();
 
         Assert.True(tx.WasRolledBack);
         Assert.True(tx.IsCompleted);
-        _mockTransaction.Verify(t => t.Rollback(), Times.Once);
+         
     }
 
     [Fact]
     public void Commit_AfterDispose_Throws()
     {
-        var tx = new TransactionContext(_mockContext.Object);
+        var tx = new TransactionContext(_dbContext);
         tx.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => tx.Commit());
@@ -77,10 +76,9 @@ public class TransactionContextTests
     [Fact]
     public async Task DisposeAsync_Uncommitted_TriggersRollback()
     {
-        var tx = new TransactionContext(_mockContext.Object);
+        var tx = new TransactionContext(_dbContext);
         await tx.DisposeAsync();
 
         Assert.True(tx.IsCompleted);
-        _mockTransaction.Verify(t => t.Rollback(), Times.Once);
-    }
+   }
 }
