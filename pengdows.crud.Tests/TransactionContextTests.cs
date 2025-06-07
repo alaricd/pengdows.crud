@@ -11,11 +11,11 @@ using Xunit;
 public class TransactionContextTests
 {
     private IDatabaseContext _dbContext;
-    
+
 
     private IDatabaseContext CreateContext(SupportedDatabase dbType)
     {
-          _dbContext = new DatabaseContext("Data Source=:memory:", SqliteFactory.Instance, new TypeMapRegistry());
+        _dbContext = new DatabaseContext("Data Source=:memory:", SqliteFactory.Instance, new TypeMapRegistry());
         return _dbContext;
     }
 
@@ -36,7 +36,8 @@ public class TransactionContextTests
     [Theory]
     [InlineData(SupportedDatabase.CockroachDb, IsolationLevel.Serializable)]
     [InlineData(SupportedDatabase.Sqlite, IsolationLevel.Serializable)]
-    public void Constructor_SetsIsolationLevel_Correctly(SupportedDatabase supportedDatabase, IsolationLevel isolationLevel)
+    public void Constructor_SetsIsolationLevel_Correctly(SupportedDatabase supportedDatabase,
+        IsolationLevel isolationLevel)
     {
         var tx = new TransactionContext(CreateContext(supportedDatabase), IsolationLevel.ReadUncommitted);
         Assert.Equal(IsolationLevel.ReadCommitted, tx.IsolationLevel); // upgraded due to ReadWrite
@@ -50,7 +51,6 @@ public class TransactionContextTests
 
         Assert.True(tx.WasCommitted);
         Assert.True(tx.IsCompleted);
-       
     }
 
     [Fact]
@@ -61,7 +61,6 @@ public class TransactionContextTests
 
         Assert.True(tx.WasRolledBack);
         Assert.True(tx.IsCompleted);
-         
     }
 
     [Fact]
@@ -80,5 +79,5 @@ public class TransactionContextTests
         await tx.DisposeAsync();
 
         Assert.True(tx.IsCompleted);
-   }
+    }
 }
