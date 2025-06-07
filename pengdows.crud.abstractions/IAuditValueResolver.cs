@@ -1,7 +1,7 @@
 
 namespace pengdows.crud;
 
-public interface IAuditFieldResolver
+public interface IAuditValueResolver
 {
     IAuditValues Resolve();
 }

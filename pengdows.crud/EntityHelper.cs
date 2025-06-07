@@ -28,13 +28,13 @@ public class EntityHelper<TEntity, TRowID> :
 
     private readonly IColumnInfo? _versionColumn;
     private readonly Type? _userFieldType = null;
-    private readonly IAuditFieldResolver? _auditFieldResolver;
+    private readonly IAuditValueResolver? _auditValueResolver;
 
     public EntityHelper(IDatabaseContext databaseContext,
         EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
     )
     {
-        _auditFieldResolver = null;
+        _auditValueResolver = null;
         _context = databaseContext;
         _tableInfo = _context.TypeMapRegistry.GetTableInfo<TEntity>() ??
                      throw new InvalidOperationException($"Type {typeof(TEntity).FullName} is not a table.");
@@ -61,11 +61,11 @@ public class EntityHelper<TEntity, TRowID> :
 
     [Obsolete("Use the constructor without IServiceProvider instead")]
     public EntityHelper(IDatabaseContext databaseContext,
-        IAuditFieldResolver auditFieldResolver,
+        IAuditValueResolver auditValueResolver,
         EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
     )
     {
-        _auditFieldResolver = auditFieldResolver;
+        _auditValueResolver = auditValueResolver;
         _context = databaseContext;
         _tableInfo = _context.TypeMapRegistry.GetTableInfo<TEntity>() ??
                      throw new InvalidOperationException($"Type {typeof(TEntity).FullName} is not a table.");
@@ -585,10 +585,10 @@ public class EntityHelper<TEntity, TRowID> :
 
     private void SetAuditFields(TEntity obj, bool updateOnly)
     {
-        if (_userFieldType == null || obj == null || _auditFieldResolver == null)
+        if (_userFieldType == null || obj == null || _auditValueResolver == null)
             return;
 
-        var auditValues = _auditFieldResolver.Resolve();
+        var auditValues = _auditValueResolver.Resolve();
         if (auditValues == null)
         {
             return;

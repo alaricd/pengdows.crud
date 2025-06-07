@@ -5,7 +5,7 @@ namespace WebApplication1;
 public class UserEntityHelper : EntityHelper<UserEntity, int>
 {
     public UserEntityHelper(IDatabaseContext ctx, 
-        IAuditFieldResolver auditProvider)
+        IAuditValueResolver auditProvider)
         : base(ctx, auditProvider)
     {
     }
