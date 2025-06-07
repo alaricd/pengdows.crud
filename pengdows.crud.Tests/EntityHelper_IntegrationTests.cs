@@ -87,7 +87,7 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
         var typeMap = new TypeMapRegistry();
         typeMap.Register<IdentityTestEntity>(); // assumes you auto-build TableInfo from attributes
 
-        var helper = new EntityHelper<IdentityTestEntity, int>(Context, null);
+        var helper = new EntityHelper<IdentityTestEntity, int>(Context, new StubAuditValueResolver("fred"));
 
         var entity = new IdentityTestEntity { Id = 42, Name = "Hello" };
 
