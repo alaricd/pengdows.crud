@@ -201,13 +201,23 @@ public class EntityHelper<TEntity, TRowID> :
         {
             if (column.IsId && !column.IsIdIsWritable) continue;
 
+            var value = column.MakeParameterValueFromField(objectToCreate);
+
+            // If no audit resolver is provided and the value is null for an audit column,
+            // skip including this column so database defaults will apply.
+            if (_auditValueResolver == null &&
+                (column.IsCreatedBy || column.IsCreatedOn || column.IsLastUpdatedBy || column.IsLastUpdatedOn) &&
+                Utils.IsNullOrDbNull(value))
+            {
+                continue;
+            }
+
             if (columns.Length > 0)
             {
                 columns.Append(", ");
                 values.Append(", ");
             }
 
-            var value = column.MakeParameterValueFromField(objectToCreate);
             var p = _context.CreateDbParameter(
                 column.DbType,
                 value
