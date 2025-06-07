@@ -312,7 +312,7 @@ public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
 
     public string WrapObjectName(string objectName) => _context.WrapObjectName(objectName);
 
-    public string MakaParameterName(DbParameter parameter) => _context.MakeParameterName(parameter);
+    public string MakeParameterName(DbParameter parameter) => _context.MakeParameterName(parameter);
 
     protected override void DisposeManaged()
     {

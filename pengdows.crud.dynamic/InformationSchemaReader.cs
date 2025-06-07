@@ -271,7 +271,7 @@ LEFT JOIN {0}information_schema{1}.{0}key_column_usage{1} k
 LEFT JOIN {0}information_schema{1}.{0}table_constraints{1} {0}tc{1}
   ON {0}k{1}.{0}constraint_name{1} = {0}tc{1}.{0}constraint_name{1}
  AND {0}tc{1}.{0}constraint_type{1} = ");
-        sqlContainer.Query.Append(sqlContainer.MakaParameterName(pk));
+        sqlContainer.Query.Append(sqlContainer.MakeParameterName(pk));
         return;
     }
 
@@ -300,7 +300,7 @@ SELECT
         ON  {0}cc{1}.{0}OWNER{1} = {0}con{1}.{0}OWNER{1} 
        AND {0}cc{1}.{0}CONSTRAINT_NAME{1} = {0}con{1}.{0}CONSTRAINT_NAME{1} 
        AND {0}con{1}.{0}CONSTRAINT_TYPE{1} = ");
-        sqlContainer.Query.Append(sqlContainer.MakaParameterName(constraintParameter));
+        sqlContainer.Query.Append(sqlContainer.MakeParameterName(constraintParameter));
     }
 
     private static bool IsLikelyIdColumn(string columnName, string tableName)
