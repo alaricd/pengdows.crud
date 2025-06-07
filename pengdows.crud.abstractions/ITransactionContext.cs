@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace pengdows.crud;
 
 public interface ITransactionContext : IDatabaseContext
@@ -7,4 +9,5 @@ public interface ITransactionContext : IDatabaseContext
     bool WasCommitted { get; }
     bool WasRolledBack { get; }
     bool IsCompleted { get; }
+    IsolationLevel IsolationLevel { get; }
 }

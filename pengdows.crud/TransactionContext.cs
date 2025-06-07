@@ -2,6 +2,7 @@
 
 using System.Data;
 using System.Data.Common;
+using System.Runtime.InteropServices.ComTypes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using pengdows.crud.enums;
@@ -41,27 +42,17 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
     {
          _logger = logger ?? new NullLogger<TransactionContext>();
         _context = context as DatabaseContext ?? throw new ArgumentNullException(nameof(context));
-        if (executionType == null)
-        {
-            if (IsReadOnlyConnection)
-            {
-                executionType = ExecutionType.Read;
-            }
-            else
-            {
-                executionType = ExecutionType.Write;
-            }
-        }
+        executionType ??= IsReadOnlyConnection ? ExecutionType.Read : ExecutionType.Write;
 
         if (IsReadOnlyConnection && executionType != ExecutionType.Read)
         {
             throw new NotSupportedException("DatabaseContext is read only");
         }
 
-        // if (_context.Product == SupportedDatabase.CockroachDb)
-        // {
-        //     isolationLevel = IsolationLevel.Serializable;
-        // }
+        if (_context.Product == SupportedDatabase.CockroachDb)
+        {
+            isolationLevel = IsolationLevel.Serializable;
+        }
 
         //var executionType = GetExecutionAndSetIsolationTypes(ref isolationLevel);
         // IsolationLevel = isolationLevel;
@@ -104,7 +95,7 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
     //     return executionType;
     // }
 
-    public IsolationLevel IsolationLevel { get; }
+    public IsolationLevel IsolationLevel => _transaction.IsolationLevel;
 
     // Delegated context properties
     public long NumberOfOpenConnections => _context.NumberOfOpenConnections;

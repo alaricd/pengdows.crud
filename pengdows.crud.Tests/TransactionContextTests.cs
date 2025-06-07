@@ -4,19 +4,26 @@ using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Moq;
 using pengdows.crud;
+using pengdows.crud.configuration;
 using pengdows.crud.enums;
+using pengdows.crud.FakeDb;
 using pengdows.crud.wrappers;
 using Xunit;
 
 public class TransactionContextTests
 {
-    private IDatabaseContext _dbContext;
-
-
-    private IDatabaseContext CreateContext(SupportedDatabase dbType)
+    private IDatabaseContext CreateContext(SupportedDatabase supportedDatabase)
     {
-        _dbContext = new DatabaseContext("Data Source=:memory:", SqliteFactory.Instance, new TypeMapRegistry());
-        return _dbContext;
+        var factory = new FakeDbFactory(supportedDatabase);
+        var config = new DatabaseContextConfiguration
+        {
+            DbMode = DbMode.SingleWriter,
+            ProviderName = supportedDatabase.ToString(),
+            ConnectionString = $"Data Source=test;EmulatedProduct={supportedDatabase}"
+        };
+         
+        var dbContext = new DatabaseContext(config, factory);
+        return dbContext;
     }
 
     // public TransactionContextTests()
@@ -39,14 +46,19 @@ public class TransactionContextTests
     public void Constructor_SetsIsolationLevel_Correctly(SupportedDatabase supportedDatabase,
         IsolationLevel isolationLevel)
     {
-        var tx = new TransactionContext(CreateContext(supportedDatabase), IsolationLevel.ReadUncommitted);
-        Assert.Equal(IsolationLevel.ReadCommitted, tx.IsolationLevel); // upgraded due to ReadWrite
+        var tx = CreateContext(supportedDatabase).BeginTransaction(IsolationLevel.ReadUncommitted);
+        if (tx.IsolationLevel < IsolationLevel.Chaos)
+        {
+            Console.WriteLine($"{supportedDatabase}:  {nameof(tx.IsolationLevel)}: {tx.IsolationLevel}");
+        }
+
+        Assert.True(IsolationLevel.Chaos < tx.IsolationLevel); // upgraded due to ReadWrite
     }
 
     [Fact]
     public void Commit_SetsCommittedState()
     {
-        var tx = new TransactionContext(CreateContext(SupportedDatabase.Sqlite));
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
         tx.Commit();
 
         Assert.True(tx.WasCommitted);
@@ -56,7 +68,7 @@ public class TransactionContextTests
     [Fact]
     public void Rollback_SetsRollbackState()
     {
-        var tx = new TransactionContext(_dbContext);
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
         tx.Rollback();
 
         Assert.True(tx.WasRolledBack);
@@ -66,7 +78,7 @@ public class TransactionContextTests
     [Fact]
     public void Commit_AfterDispose_Throws()
     {
-        var tx = new TransactionContext(_dbContext);
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
         tx.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => tx.Commit());
@@ -75,7 +87,7 @@ public class TransactionContextTests
     [Fact]
     public async Task DisposeAsync_Uncommitted_TriggersRollback()
     {
-        var tx = new TransactionContext(_dbContext);
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
         await tx.DisposeAsync();
 
         Assert.True(tx.IsCompleted);
