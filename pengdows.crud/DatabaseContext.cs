@@ -9,6 +9,7 @@ using pengdows.crud.configuration;
 using pengdows.crud.enums;
 using pengdows.crud.exceptions;
 using pengdows.crud.infrastructure;
+using pengdows.crud.isolation;
 using pengdows.crud.threading;
 using pengdows.crud.wrappers;
 
@@ -31,6 +32,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     private bool _isWriteConnection = true;
     private long _maxNumberOfOpenConnections;
     private string _connectionString;
+    private IIsolationResolver _isolationResolver;
     public ReadWriteMode ReadWriteMode { get; }
 
     [Obsolete("Use the constructor that takes DatabaseContextConfiguration instead.")]
@@ -99,6 +101,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
 
 
     public bool IsReadOnlyConnection => _isReadConnection && !_isWriteConnection;
+    public bool RCSIEnabled { get; } 
 
     public ILockerAsync GetLock()
     {
@@ -238,6 +241,11 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
             throw new InvalidOperationException("Read-only transactions must use 'RepeatableRead'.");
 
         return new TransactionContext(this, isolationLevel.Value);
+    }
+
+    public ITransactionContext BeginTransaction(IsolationProfile isolationProfile)
+    {
+        return new TransactionContext(this, _isolationResolver.Resolve(isolationProfile));
     }
 
 

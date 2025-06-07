@@ -1,7 +1,6 @@
 ﻿using pengdows.crud.enums;
 using WebApplication1.Generator;
 using System.Data;
-using System.Data.Common;
 using pengdows.crud.dynamic.DynamicPocoGenerator;
 
 namespace pengdows.crud.dynamic;

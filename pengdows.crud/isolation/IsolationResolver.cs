@@ -15,7 +15,7 @@ public sealed class IsolationResolver : IIsolationResolver
         _product = product;
         _rcsi = readCommittedSnapshotEnabled;
         _supportedLevels = BuildSupportedIsolationLevels(product, _rcsi);
-        _profileMap = BuildProfileMapping(product);
+        _profileMap = BuildProfileMapping(product, _rcsi);
     }
 
     public IsolationLevel Resolve(IsolationProfile profile)
@@ -23,6 +23,12 @@ public sealed class IsolationResolver : IIsolationResolver
         if (!_profileMap.TryGetValue(profile, out var level))
         {
             throw new NotSupportedException($"Profile {profile} not supported for {_product}");
+        }
+
+        if (!_rcsi && profile == IsolationProfile.SafeNonBlockingReads && level == IsolationLevel.ReadCommitted)
+        {
+            throw new InvalidOperationException(
+                $"Tenant {_product} does not have RCSI enabled. Profile {profile} maps to blocking isolation level.");
         }
 
         Validate(level);
@@ -46,25 +52,44 @@ public sealed class IsolationResolver : IIsolationResolver
             [SupportedDatabase.SqlServer] = new HashSet<IsolationLevel>()
             {
                 IsolationLevel.ReadUncommitted,
-                rcsi ? IsolationLevel.ReadCommitted : default, // only allow if RCSI is ON
+                rcsi ? IsolationLevel.ReadCommitted : default,
                 IsolationLevel.RepeatableRead,
                 IsolationLevel.Serializable,
                 IsolationLevel.Snapshot
             }.Where(l => l != default).ToHashSet(),
 
-            // Add other DBs here as before...
+            [SupportedDatabase.PostgreSql] =
+            [
+                IsolationLevel.ReadUncommitted,
+                IsolationLevel.ReadCommitted,
+                IsolationLevel.RepeatableRead,
+                IsolationLevel.Serializable
+            ],
+
+            [SupportedDatabase.CockroachDb] = [IsolationLevel.Serializable]
+
+            // Add more as needed
         };
 
         return map.TryGetValue(db, out var set) ? set : throw new NotSupportedException($"Unsupported DB: {db}");
     }
 
-    private static Dictionary<IsolationProfile, IsolationLevel> BuildProfileMapping(SupportedDatabase db)
+    private static Dictionary<IsolationProfile, IsolationLevel> BuildProfileMapping(SupportedDatabase db, bool rcsi)
     {
         return db switch
         {
             SupportedDatabase.SqlServer => new()
             {
-                [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.ReadCommitted, // assumes RCSI is validated
+                [IsolationProfile.SafeNonBlockingReads] = rcsi
+                    ? IsolationLevel.ReadCommitted
+                    : IsolationLevel.Snapshot,
+                [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable,
+                [IsolationProfile.FastWithRisks] = IsolationLevel.ReadUncommitted
+            },
+
+            SupportedDatabase.PostgreSql => new()
+            {
+                [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.ReadCommitted,
                 [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable,
                 [IsolationProfile.FastWithRisks] = IsolationLevel.ReadUncommitted
             },
@@ -74,8 +99,6 @@ public sealed class IsolationResolver : IIsolationResolver
                 [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.Serializable,
                 [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable
             },
-
-            // ... other DBs here ...
 
             _ => throw new NotSupportedException($"Isolation profile mapping not defined for DB: {db}")
         };

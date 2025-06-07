@@ -94,6 +94,8 @@ public interface IDatabaseContext : ISafeAsyncDisposableBase
     /// </summary>
     bool IsReadOnlyConnection { get; }
 
+    bool RCSIEnabled { get; }
+
     /// <summary>
     /// Returns an async-compatible lock for this context instance.
     /// </summary>

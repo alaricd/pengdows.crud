@@ -5,7 +5,6 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
-using Microsoft.Extensions.DependencyInjection;
 using pengdows.crud.attributes;
 using pengdows.crud.enums;
 using pengdows.crud.exceptions;
@@ -15,22 +14,27 @@ using pengdows.crud.wrappers;
 
 namespace pengdows.crud;
 
-public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> where TEntity : class, new()
+public class EntityHelper<TEntity, TRowID> :
+    IEntityHelper<TEntity, TRowID> where TEntity : class, new()
 {
     // Cache for compiled property setters
     private static readonly ConcurrentDictionary<PropertyInfo, Action<object, object?>> _propertySetters = new();
     private readonly IDatabaseContext _context;
+
     private readonly IColumnInfo? _idColumn;
-   // private readonly IServiceProvider _serviceProvider;
+
+    // private readonly IServiceProvider _serviceProvider;
     private readonly ITableInfo _tableInfo;
 
     private readonly IColumnInfo? _versionColumn;
     private readonly Type? _userFieldType = null;
+    private readonly IAuditFieldResolver? _auditFieldResolver;
 
     public EntityHelper(IDatabaseContext databaseContext,
         EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
     )
     {
+        _auditFieldResolver = null;
         _context = databaseContext;
         _tableInfo = _context.TypeMapRegistry.GetTableInfo<TEntity>() ??
                      throw new InvalidOperationException($"Type {typeof(TEntity).FullName} is not a table.");
@@ -57,10 +61,11 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
 
     [Obsolete("Use the constructor without IServiceProvider instead")]
     public EntityHelper(IDatabaseContext databaseContext,
-        IServiceProvider serviceProvider,
+        IAuditFieldResolver auditFieldResolver,
         EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
     )
     {
+        _auditFieldResolver = auditFieldResolver;
         _context = databaseContext;
         _tableInfo = _context.TypeMapRegistry.GetTableInfo<TEntity>() ??
                      throw new InvalidOperationException($"Type {typeof(TEntity).FullName} is not a table.");
@@ -70,7 +75,8 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
                 c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
                 c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
             )?.PropertyInfo.PropertyType;
-        if (propertyInfoPropertyType != null ) {
+        if (propertyInfoPropertyType != null)
+        {
             _userFieldType = propertyInfoPropertyType;
         }
 
@@ -579,14 +585,18 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
 
     private void SetAuditFields(TEntity obj, bool updateOnly)
     {
-        if (_userFieldType == null ||   obj == null)
+        if (_userFieldType == null || obj == null || _auditFieldResolver == null)
             return;
 
-        var (userId, now) = AuditFieldResolver.ResolveFrom(_userFieldType);
+        var auditValues = _auditFieldResolver.Resolve();
+        if (auditValues == null)
+        {
+            return;
+        }
 
         // Always update last-modified
-        _tableInfo.LastUpdatedBy?.PropertyInfo?.SetValue(obj, userId);
-        _tableInfo.LastUpdatedOn?.PropertyInfo?.SetValue(obj, now);
+        _tableInfo.LastUpdatedBy?.PropertyInfo?.SetValue(obj, auditValues.UserId);
+        _tableInfo.LastUpdatedOn?.PropertyInfo?.SetValue(obj, auditValues.UtcNow);
 
         if (updateOnly) return;
 
@@ -598,14 +608,14 @@ public class EntityHelper<TEntity, TRowID> : IEntityHelper<TEntity, TRowID> wher
                 || currentValue as string == string.Empty
                 || Utils.IsZeroNumeric(currentValue)
                 || (currentValue is Guid guid && guid == Guid.Empty))
-                _tableInfo.CreatedBy.PropertyInfo.SetValue(obj, userId);
+                _tableInfo.CreatedBy.PropertyInfo.SetValue(obj, auditValues.UserId);
         }
 
         if (_tableInfo.CreatedOn?.PropertyInfo != null)
         {
             var currentValue = _tableInfo.CreatedOn.PropertyInfo.GetValue(obj) as DateTime?;
             if (currentValue == null || currentValue == default(DateTime))
-                _tableInfo.CreatedOn.PropertyInfo.SetValue(obj, now);
+                _tableInfo.CreatedOn.PropertyInfo.SetValue(obj, auditValues.UtcNow);
         }
     }
 

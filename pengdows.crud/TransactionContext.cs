@@ -39,7 +39,7 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
         ExecutionType? executionType = null,
         ILogger<TransactionContext>? logger = null)
     {
-        _logger = logger ?? new NullLogger<TransactionContext>();
+         _logger = logger ?? new NullLogger<TransactionContext>();
         _context = context as DatabaseContext ?? throw new ArgumentNullException(nameof(context));
         if (executionType == null)
         {
@@ -57,13 +57,13 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
         {
             throw new NotSupportedException("DatabaseContext is read only");
         }
-        
+
         // if (_context.Product == SupportedDatabase.CockroachDb)
         // {
         //     isolationLevel = IsolationLevel.Serializable;
         // }
 
-         //var executionType = GetExecutionAndSetIsolationTypes(ref isolationLevel);
+        //var executionType = GetExecutionAndSetIsolationTypes(ref isolationLevel);
         // IsolationLevel = isolationLevel;
 
         _connection = _context.GetConnection(executionType.Value, true);
@@ -114,6 +114,7 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
     public SupportedDatabase Product => _context.Product;
     public long MaxNumberOfConnections => _context.MaxNumberOfConnections;
     public bool IsReadOnlyConnection => _context.IsReadOnlyConnection;
+    public bool RCSIEnabled => _context.RCSIEnabled;
     public int MaxParameterLimit => _context.MaxParameterLimit;
     public DbMode ConnectionMode => DbMode.SingleConnection;
     public ITypeMapRegistry TypeMapRegistry => _context.TypeMapRegistry;
@@ -138,6 +139,9 @@ public class TransactionContext : SafeAsyncDisposableBase, ITransactionContext
     public DbParameter CreateDbParameter<T>(DbType type, T value) => _context.CreateDbParameter(type, value);
     public ITrackedConnection GetConnection(ExecutionType type, bool isShared = false) => _connection;
     public string WrapObjectName(string name) => _context.WrapObjectName(name);
+
+    public ITransactionContext BeginTransaction(IsolationProfile isolationProfile) => 
+        throw new InvalidOperationException("Cannot begin a nested transaction from TransactionContext.");
 
     public string GenerateRandomName(int length = 5, int parameterNameMaxLength = 30) =>
         _context.GenerateRandomName(length, parameterNameMaxLength);

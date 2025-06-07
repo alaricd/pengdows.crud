@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using pengdows.crud;
 
 namespace testbed;
@@ -10,7 +11,7 @@ public class TestProvider : IAsyncTestProvider
     public TestProvider(IDatabaseContext databaseContext, IServiceProvider serviceProvider)
     {
         _context = databaseContext;
-        _helper = new EntityHelper<TestTable, long>(databaseContext, serviceProvider);
+        _helper = new EntityHelper<TestTable, long>(databaseContext, serviceProvider.GetService<IAuditFieldResolver>());
     }
 
 
