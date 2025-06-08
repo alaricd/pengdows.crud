@@ -10,6 +10,12 @@ namespace pengdows.crud.Tests.isolation;
 public class IsolationResolverTests
 {
     [Fact]
+    public void Constructor_UnsupportedDatabase_Throws()
+    {
+         Assert.Throws<NotSupportedException>(() => new IsolationResolver(SupportedDatabase.Unknown, true));
+    }
+
+    [Fact]
     public void GetSupportedLevels_SqlServer_RcsiTrue()
     {
         var resolver = new IsolationResolver(SupportedDatabase.SqlServer, true);
