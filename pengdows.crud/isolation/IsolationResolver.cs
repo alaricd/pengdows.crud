@@ -25,7 +25,8 @@ public sealed class IsolationResolver : IIsolationResolver
             throw new NotSupportedException($"Profile {profile} not supported for {_product}");
         }
 
-        if (!_rcsi && profile == IsolationProfile.SafeNonBlockingReads && level == IsolationLevel.ReadCommitted)
+        if (!_rcsi && _product == SupportedDatabase.PostgreSql &&
+            profile == IsolationProfile.SafeNonBlockingReads && level == IsolationLevel.ReadCommitted)
         {
             throw new InvalidOperationException(
                 $"Tenant {_product} does not have RCSI enabled. Profile {profile} maps to blocking isolation level.");

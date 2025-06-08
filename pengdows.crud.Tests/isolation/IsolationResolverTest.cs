@@ -12,7 +12,7 @@ public class IsolationResolverTests
     [Fact]
     public void Constructor_UnsupportedDatabase_Throws()
     {
-         Assert.Throws<NotSupportedException>(() => new IsolationResolver(SupportedDatabase.Unknown, true));
+        Assert.Throws<NotSupportedException>(() => new IsolationResolver(SupportedDatabase.Unknown, true));
     }
 
     [Fact]
@@ -60,5 +60,62 @@ public class IsolationResolverTests
         Assert.Equal(IsolationLevel.Serializable, resolver.Resolve(IsolationProfile.SafeNonBlockingReads));
         Assert.Throws<NotSupportedException>(() => resolver.Resolve(IsolationProfile.FastWithRisks));
         Assert.Throws<InvalidOperationException>(() => resolver.Validate(IsolationLevel.ReadCommitted));
+    }
+
+    [Fact]
+    public void GetSupportedLevels_Firebird()
+    {
+        var resolver = new IsolationResolver(SupportedDatabase.Firebird, false);
+
+        var levels = resolver.GetSupportedLevels().OrderBy(l => l).ToArray();
+        var expected = new[]
+        {
+            IsolationLevel.ReadCommitted,
+            IsolationLevel.Serializable,
+            IsolationLevel.Snapshot
+        };
+
+        Assert.Equal(expected, levels);
+    }
+
+    [Fact]
+    public void Resolve_MySql_Mappings()
+    {
+        var resolver = new IsolationResolver(SupportedDatabase.MySql, false);
+
+        Assert.Equal(IsolationLevel.ReadCommitted, resolver.Resolve(IsolationProfile.SafeNonBlockingReads));
+        Assert.Equal(IsolationLevel.Serializable, resolver.Resolve(IsolationProfile.StrictConsistency));
+        Assert.Equal(IsolationLevel.ReadUncommitted, resolver.Resolve(IsolationProfile.FastWithRisks));
+    }
+
+    [Fact]
+    public void Resolve_Oracle_Mappings()
+    {
+        var resolver = new IsolationResolver(SupportedDatabase.Oracle, false);
+
+        Assert.Equal(IsolationLevel.ReadCommitted, resolver.Resolve(IsolationProfile.SafeNonBlockingReads));
+        Assert.Equal(IsolationLevel.Serializable, resolver.Resolve(IsolationProfile.StrictConsistency));
+        Assert.Throws<NotSupportedException>(() => resolver.Resolve(IsolationProfile.FastWithRisks));
+    }
+
+    [Fact]
+    public void GetSupportedLevels_Sqlite()
+    {
+        var resolver = new IsolationResolver(SupportedDatabase.Sqlite, false);
+
+        var levels = resolver.GetSupportedLevels().OrderBy(l => l).ToArray();
+        var expected = new[] { IsolationLevel.ReadCommitted, IsolationLevel.Serializable };
+
+        Assert.Equal(expected, levels);
+    }
+
+    [Fact]
+    public void Resolve_Sqlite_Mappings()
+    {
+        var resolver = new IsolationResolver(SupportedDatabase.Sqlite, false);
+
+        Assert.Equal(IsolationLevel.ReadCommitted, resolver.Resolve(IsolationProfile.SafeNonBlockingReads));
+        Assert.Equal(IsolationLevel.Serializable, resolver.Resolve(IsolationProfile.StrictConsistency));
+        Assert.Throws<NotSupportedException>(() => resolver.Resolve(IsolationProfile.FastWithRisks));
     }
 }
