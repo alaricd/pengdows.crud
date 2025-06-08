@@ -2,7 +2,6 @@
 
 using System.Data;
 using System.Data.Common;
-using System.Runtime.InteropServices.ComTypes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using pengdows.crud.enums;
