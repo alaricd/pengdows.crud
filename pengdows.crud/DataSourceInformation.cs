@@ -134,6 +134,16 @@ namespace pengdows.crud
             DatabaseProductName = version;
 
             var final = InferDatabaseProduct(version);
+            if (connection.ConnectionString.ToLower().Contains("emulatedproduct="))
+            {
+                var csb = new DbConnectionStringBuilder
+                {
+                    ConnectionString = connection.ConnectionString
+                };
+                var x = csb["EmulatedProduct"] as string;
+                final = Enum.Parse<SupportedDatabase>(x, true);
+            }
+
             Product = final != SupportedDatabase.Unknown ? final : initial;
             schema.TableName = ((schema.TableName?.Length < 1) ? Product.ToString() : schema.TableName);
             schema.WriteXml($"{Product}.schema.xml", XmlWriteMode.WriteSchema);

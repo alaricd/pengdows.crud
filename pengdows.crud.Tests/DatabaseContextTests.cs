@@ -10,7 +10,7 @@ using pengdows.crud.FakeDb;
 using pengdows.crud.wrappers;
 using Xunit;
 
-namespace pengdows.crud.tests;
+namespace pengdows.crud.Tests;
 
 public class DatabaseContextTests
 {

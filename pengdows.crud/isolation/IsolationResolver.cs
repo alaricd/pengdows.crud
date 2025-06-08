@@ -72,6 +72,34 @@ public sealed class IsolationResolver : IIsolationResolver
             [
                 IsolationLevel.ReadCommitted,
                 IsolationLevel.Serializable
+            ],
+            [SupportedDatabase.Firebird] =
+            [
+                IsolationLevel.ReadCommitted,
+                IsolationLevel.Snapshot,
+                IsolationLevel.Serializable
+            ],
+
+            [SupportedDatabase.MySql] =
+            [
+                IsolationLevel.ReadUncommitted,
+                IsolationLevel.ReadCommitted,
+                IsolationLevel.RepeatableRead,
+                IsolationLevel.Serializable
+            ],
+
+            [SupportedDatabase.MariaDb] =
+            [
+                IsolationLevel.ReadUncommitted,
+                IsolationLevel.ReadCommitted,
+                IsolationLevel.RepeatableRead,
+                IsolationLevel.Serializable
+            ],
+
+            [SupportedDatabase.Oracle] =
+            [
+                IsolationLevel.ReadCommitted,
+                IsolationLevel.Serializable
             ]
 
             // Add more as needed
@@ -106,6 +134,31 @@ public sealed class IsolationResolver : IIsolationResolver
                 [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable
             },
             SupportedDatabase.Sqlite => new()
+            {
+                [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.ReadCommitted,
+                [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable
+            },
+            SupportedDatabase.Firebird => new()
+            {
+                [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.Snapshot,
+                [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable
+            },
+
+            SupportedDatabase.MySql => new()
+            {
+                [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.ReadCommitted,
+                [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable,
+                [IsolationProfile.FastWithRisks] = IsolationLevel.ReadUncommitted
+            },
+
+            SupportedDatabase.MariaDb => new()
+            {
+                [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.ReadCommitted,
+                [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable,
+                [IsolationProfile.FastWithRisks] = IsolationLevel.ReadUncommitted
+            },
+
+            SupportedDatabase.Oracle => new()
             {
                 [IsolationProfile.SafeNonBlockingReads] = IsolationLevel.ReadCommitted,
                 [IsolationProfile.StrictConsistency] = IsolationLevel.Serializable
