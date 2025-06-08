@@ -525,7 +525,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
             if (mode != DbMode.Standard)
             {
                 //
-                Interlocked.Increment(ref _connectionCount);
+                //Interlocked.Increment(ref _connectionCount);
                 // if the mode is anything but standard
                 // we store it as our minimal connection
                 ApplyConnectionSessionSettings(conn);

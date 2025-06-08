@@ -113,4 +113,105 @@ public class DatabaseContextTests
         var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, readWriteMode: ReadWriteMode.WriteOnly);
         Assert.Throws<InvalidOperationException>(() => context.AssertIsReadConnection());
     }
+    
+    public static IEnumerable<object[]> ProvidersWithSettings()
+        => new List<object[]>
+        {
+            new object[] { SupportedDatabase.SqlServer, false },
+            new object[] { SupportedDatabase.MySql, true },
+            new object[] { SupportedDatabase.MariaDb, true },
+            new object[] { SupportedDatabase.PostgreSql, true },
+            new object[] { SupportedDatabase.CockroachDb, true },
+            new object[] { SupportedDatabase.Oracle, true },
+            new object[] { SupportedDatabase.Sqlite, true },
+            new object[] { SupportedDatabase.Firebird, false }
+        };
+
+    [Theory]
+    [MemberData(nameof(ProvidersWithSettings))]
+    public void SessionSettingsPreamble_CorrectPerProvider(SupportedDatabase product, bool expectSettings)
+    {
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
+        var preamble = context.SessionSettingsPreamble;
+        if (expectSettings)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(preamble));
+        }
+        else
+        {
+            Assert.True(string.IsNullOrWhiteSpace(preamble));
+        }
+    }
+
+    [Fact]
+    public void CloseAndDisposeConnection_StandardMode_ClosesConnection()
+    {
+        var product = SupportedDatabase.SqlServer;
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, mode: DbMode.Standard);
+        Assert.Equal(DbMode.Standard, context.ConnectionMode);
+        var conn = context.GetConnection(ExecutionType.Read);
+        conn.Open();
+        Assert.Equal(1, context.NumberOfOpenConnections);
+        context.CloseAndDisposeConnection(conn);
+        Assert.Equal(0, context.NumberOfOpenConnections);
+    }
+
+    [Fact]
+    public void CloseAndDisposeConnection_SingleConnectionMode_KeepsOpen()
+    {
+        var product = SupportedDatabase.Sqlite;
+        var config = new DatabaseContextConfiguration
+        {
+            ConnectionString = $"Data Source=:memory:;EmulatedProduct={product}",
+            ProviderName = product.ToString(),
+            DbMode = DbMode.SingleConnection
+        };
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext(config, factory);
+        Assert.Equal(DbMode.SingleConnection, context.ConnectionMode);
+        var conn = context.GetConnection(ExecutionType.Read);
+        Assert.Equal(ConnectionState.Open, conn.State);
+        var before = context.NumberOfOpenConnections;
+        context.CloseAndDisposeConnection(conn);
+        Assert.Equal(before, context.NumberOfOpenConnections);
+        Assert.Equal(ConnectionState.Open, conn.State);
+        context.Dispose();
+        Assert.Equal(0, context.NumberOfOpenConnections);
+    }
+
+    [Fact]
+    public void MaxNumberOfConnections_TracksPeakUsage()
+    {
+        var product = SupportedDatabase.SqlServer;
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
+        var c1 = context.GetConnection(ExecutionType.Read);
+        var c2 = context.GetConnection(ExecutionType.Read);
+        c1.Open();
+        c2.Open();
+        Assert.Equal(2, context.MaxNumberOfConnections);
+        context.CloseAndDisposeConnection(c1);
+        context.CloseAndDisposeConnection(c2);
+        Assert.Equal(2, context.MaxNumberOfConnections);
+    }
+
+    [Fact]
+    public void RCSIEnabled_DefaultIsFalse()
+    {
+        var factory = new FakeDbFactory(SupportedDatabase.Sqlite);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={SupportedDatabase.Sqlite}", factory);
+        Assert.False(context.RCSIEnabled);
+    }
+
+    [Fact]
+    public void MakeParameterName_UsesDatabaseMarker()
+    {
+        var product = SupportedDatabase.PostgreSql;
+        var factory = new FakeDbFactory(product);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
+        var name = context.MakeParameterName("foo");
+        Assert.StartsWith(context.DataSourceInfo.ParameterMarker, name);
+    }
 }

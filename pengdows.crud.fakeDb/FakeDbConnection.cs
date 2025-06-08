@@ -1,5 +1,6 @@
 #region
 
+using System.Runtime.CompilerServices;
 using pengdows.crud.enums;
 
 #endregion
@@ -11,7 +12,7 @@ using System.Data;
 using System.Data.Common;
 using System.IO;
 
-public class FakeDbConnection : DbConnection, IDbConnection
+public class FakeDbConnection : DbConnection, IDbConnection, IDisposable, IAsyncDisposable
 {
     private string _connectionString = string.Empty;
     private ConnectionState _state = ConnectionState.Closed;
@@ -38,7 +39,7 @@ public class FakeDbConnection : DbConnection, IDbConnection
     {
         get
         {
-            _emulatedProduct ??= SupportedDatabase.Unknown; 
+            _emulatedProduct ??= SupportedDatabase.Unknown;
             return _emulatedProduct.Value;
         }
         set
@@ -48,6 +49,28 @@ public class FakeDbConnection : DbConnection, IDbConnection
                 _emulatedProduct = value;
             }
         }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        this.Close();
+        base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        this.CloseAsync();
+        await base.DisposeAsync();
+    }
+
+    public override async Task CloseAsync()
+    {
+        this.Close();
+    }
+
+    public override async Task OpenAsync(CancellationToken cancellationToken)
+    {
+       this.Open();
     }
 
     private SupportedDatabase ParseEmulatedProduct(string connStr)
@@ -70,16 +93,28 @@ public class FakeDbConnection : DbConnection, IDbConnection
         return EmulatedProduct;
     }
 
+    private void RaiseStateChangedEvent(ConnectionState originalState)
+    {
+        if (_state != originalState)
+        {
+            OnStateChange(new StateChangeEventArgs(originalState, _state));
+        }
+    }
 
     public override void Open()
     {
         ParseEmulatedProduct(ConnectionString);
+        var original = _state;
+
         _state = ConnectionState.Open;
+        RaiseStateChangedEvent(original);
     }
 
     public override void Close()
     {
+        var original = _state;
         _state = ConnectionState.Closed;
+        RaiseStateChangedEvent(original);
     }
 
     public override void ChangeDatabase(string databaseName)
