@@ -534,6 +534,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         }
         finally
         {
+            _isolationResolver ??= new IsolationResolver(this.Product, RCSIEnabled);
             if (mode == DbMode.Standard)
             {
                 //if it is standard mode, we can close it.
@@ -589,12 +590,12 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
                 // has to be done in connection string, not session;
                 break;
 
-            //DB 2 can't be supported under modern .net 
-//             case SupportedDatabase.Db2:
-//                 _connectionSessionSettings = @"
-//                  SET CURRENT DEGREE = 'ANY';
-// ";
-//                break;
+                //DB 2 can't be supported under modern .net 
+                //             case SupportedDatabase.Db2:
+                //                 _connectionSessionSettings = @"
+                //                  SET CURRENT DEGREE = 'ANY';
+                // ";
+                //                break;
 
             default:
                 _connectionSessionSettings = string.Empty;
