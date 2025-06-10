@@ -82,6 +82,44 @@ public class TenantConnectionResolverTests
     }
 
     [Fact]
+    public void Register_MultipleTenants_Should_StoreAllConfigurations()
+    {
+        // Arrange
+        var tenantA = new TenantConfiguration
+        {
+            Name = "a",
+            DatabaseContextConfiguration = new DatabaseContextConfiguration
+            {
+                ConnectionString = "Server=A;",
+                DbMode = DbMode.Standard,
+                ReadWriteMode = ReadWriteMode.ReadWrite
+            }
+        };
+
+        var tenantB = new TenantConfiguration
+        {
+            Name = "b",
+            DatabaseContextConfiguration = new DatabaseContextConfiguration
+            {
+                ConnectionString = "Server=B;",
+                DbMode = DbMode.Standard,
+                ReadWriteMode = ReadWriteMode.ReadWrite
+            }
+        };
+
+        var list = new[] { tenantA, tenantB };
+
+        // Act
+        TenantConnectionResolver.Register(list);
+        var resultA = TenantConnectionResolver.Instance.GetDatabaseContextConfiguration("a");
+        var resultB = TenantConnectionResolver.Instance.GetDatabaseContextConfiguration("b");
+
+        // Assert
+        Assert.Same(tenantA.DatabaseContextConfiguration, resultA);
+        Assert.Same(tenantB.DatabaseContextConfiguration, resultB);
+    }
+
+    [Fact]
     public void GetConfiguration_UnregisteredTenant_ShouldThrow()
     {
         // Arrange
