@@ -38,4 +38,32 @@ public class TenantConnectionResolver : ITenantConnectionResolver
 
         _configurations[tenant] = configuration;
     }
+
+    public static void Register(IEnumerable<TenantConfiguration> tenants)
+    {
+        if (tenants == null)
+        {
+            throw new ArgumentNullException(nameof(tenants));
+        }
+
+        foreach (var tenant in tenants)
+        {
+            if (tenant == null)
+            {
+                continue;
+            }
+
+            Register(tenant.Name, tenant.DatabaseContextConfiguration);
+        }
+    }
+
+    public static void Register(MultiTenantOptions options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        Register(options.Tenants);
+    }
 }
