@@ -1,7 +1,10 @@
-
-namespace pengdows.crud.tenant;
+#region
 
 using pengdows.crud.configuration;
+
+#endregion
+
+namespace pengdows.crud.tenant;
 
 public class TenantConfiguration
 {

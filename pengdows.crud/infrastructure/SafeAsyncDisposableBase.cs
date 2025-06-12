@@ -1,8 +1,13 @@
-namespace pengdows.crud.infrastructure;
+#region
 
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+
+#endregion
+
+namespace pengdows.crud.infrastructure;
+
 public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
 {
     private int _disposed;
@@ -11,10 +16,7 @@ public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
-            return;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         try
         {
@@ -31,10 +33,7 @@ public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
-            return;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         try
         {
@@ -49,7 +48,9 @@ public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
         GC.SuppressFinalize(this);
     }
 
-    protected virtual void DisposeManaged() { }
+    protected virtual void DisposeManaged()
+    {
+    }
 
     protected virtual async ValueTask DisposeManagedAsync()
     {
@@ -57,5 +58,7 @@ public abstract class SafeAsyncDisposableBase : ISafeAsyncDisposableBase
         await Task.CompletedTask;
     }
 
-    protected virtual void DisposeUnmanaged() { }
+    protected virtual void DisposeUnmanaged()
+    {
+    }
 }

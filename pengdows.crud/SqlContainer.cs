@@ -35,35 +35,104 @@ public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
 
     public void AddParameter(DbParameter parameter)
     {
-        if (parameter == null)
-        {
-            return;
-        }
+        if (parameter == null) return;
 
-        if (string.IsNullOrEmpty(parameter.ParameterName))
-        {
-            parameter.ParameterName = this.GenerateRandomName();
-        }
+        if (string.IsNullOrEmpty(parameter.ParameterName)) parameter.ParameterName = GenerateRandomName();
 
         _parameters.Add(parameter.ParameterName, parameter);
     }
 
     public DbParameter AddParameterWithValue<T>(DbType type, T value)
     {
-        if (value is DbParameter)
-        {
-            throw new ArgumentException("Parameter type can't be DbParameter.");
-        }
+        if (value is DbParameter) throw new ArgumentException("Parameter type can't be DbParameter.");
 
         return AddParameterWithValue(null, type, value);
     }
 
     public DbParameter AddParameterWithValue<T>(string? name, DbType type, T value)
     {
-        name ??= this.GenerateRandomName();
+        name ??= GenerateRandomName();
         var parameter = _context.CreateDbParameter(name, type, value);
         _parameters.Add(name, parameter);
         return parameter;
+    }
+
+
+    public DbCommand CreateCommand(ITrackedConnection conn)
+    {
+        var cmd = conn.CreateCommand();
+        if (_context is TransactionContext transactionContext)
+            cmd.Transaction = (transactionContext.Transaction as DbTransaction)
+                              ?? throw new InvalidOperationException("Transaction is not a transaction");
+
+        return (cmd as DbCommand)
+               ?? throw new InvalidOperationException("Command is not a DbCommand");
+    }
+
+    public void Clear()
+    {
+        Query.Clear();
+        _parameters.Clear();
+    }
+
+    public string WrapForStoredProc(ExecutionType executionType, bool includeParameters = true)
+    {
+        var procName = Query.ToString().Trim();
+
+        if (string.IsNullOrWhiteSpace(procName))
+            throw new InvalidOperationException("Procedure name is missing from the query.");
+
+        var args = includeParameters ? BuildProcedureArguments() : string.Empty;
+
+        return _context.ProcWrappingStyle switch
+        {
+            ProcWrappingStyle.PostgreSQL when executionType == ExecutionType.Read
+                => $"SELECT * FROM {procName}({args})",
+
+            ProcWrappingStyle.PostgreSQL
+                => $"CALL {procName}({args})",
+
+            ProcWrappingStyle.Oracle
+                => $"BEGIN\n\t{procName}{(string.IsNullOrEmpty(args) ? string.Empty : $"({args})")};\nEND;",
+
+            ProcWrappingStyle.Exec
+                => string.IsNullOrWhiteSpace(args)
+                    ? $"EXEC {procName}"
+                    : $"EXEC {procName} {args}",
+
+            ProcWrappingStyle.Call
+                => $"CALL {procName}({args})",
+
+            ProcWrappingStyle.ExecuteProcedure
+                => $"EXECUTE PROCEDURE {procName}({args})",
+
+            _ => throw new NotSupportedException("Stored procedures are not supported by this database.")
+        };
+
+        string BuildProcedureArguments()
+        {
+            if (_parameters.Count == 0)
+                return string.Empty;
+
+            // Named parameter support check
+            if (_context.SupportsNamedParameters)
+                // Trust that dev has set correct names
+                return string.Join(", ", _parameters.Values.Select(p => _context.MakeParameterName(p)));
+
+            // Positional binding (e.g., SQLite, MySQL)
+            return string.Join(", ", Enumerable.Repeat("?", _parameters.Count));
+        }
+    }
+
+
+    public string WrapObjectName(string objectName)
+    {
+        return _context.WrapObjectName(objectName);
+    }
+
+    public string MakeParameterName(DbParameter parameter)
+    {
+        return _context.MakeParameterName(parameter);
     }
 
     private string GenerateRandomName()
@@ -71,10 +140,7 @@ public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
         while (true)
         {
             var name = _context.GenerateRandomName();
-            if (!_parameters.ContainsKey(name))
-            {
-                return name;
-            }
+            if (!_parameters.ContainsKey(name)) return name;
         }
     }
 
@@ -161,97 +227,16 @@ public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
     public void AddParameters(IEnumerable<DbParameter> list)
     {
         if (list != null)
-        {
             foreach (var p in list.OfType<DbParameter>())
-            {
                 AddParameter(p);
-            }
-        }
-    }
-
-
-    public DbCommand CreateCommand(ITrackedConnection conn)
-    {
-        var cmd = conn.CreateCommand();
-        if (_context is TransactionContext transactionContext)
-        {
-            cmd.Transaction = (transactionContext.Transaction as DbTransaction)
-                              ?? throw new InvalidOperationException("Transaction is not a transaction");
-        }
-
-        return (cmd as DbCommand)
-               ?? throw new InvalidOperationException("Command is not a DbCommand");
-    }
-
-    public void Clear()
-    {
-        Query.Clear();
-        _parameters.Clear();
-    }
-
-    public string WrapForStoredProc(ExecutionType executionType, bool includeParameters = true)
-    {
-        var procName = Query.ToString().Trim();
-
-        if (string.IsNullOrWhiteSpace(procName))
-            throw new InvalidOperationException("Procedure name is missing from the query.");
-
-        var args = includeParameters ? BuildProcedureArguments() : string.Empty;
-
-        return _context.ProcWrappingStyle switch
-        {
-            ProcWrappingStyle.PostgreSQL when executionType == ExecutionType.Read
-                => $"SELECT * FROM {procName}({args})",
-
-            ProcWrappingStyle.PostgreSQL
-                => $"CALL {procName}({args})",
-
-            ProcWrappingStyle.Oracle
-                => $"BEGIN\n\t{procName}{(string.IsNullOrEmpty(args) ? string.Empty : $"({args})")};\nEND;",
-
-            ProcWrappingStyle.Exec
-                => string.IsNullOrWhiteSpace(args)
-                    ? $"EXEC {procName}"
-                    : $"EXEC {procName} {args}",
-
-            ProcWrappingStyle.Call
-                => $"CALL {procName}({args})",
-
-            ProcWrappingStyle.ExecuteProcedure
-                => $"EXECUTE PROCEDURE {procName}({args})",
-
-            _ => throw new NotSupportedException("Stored procedures are not supported by this database.")
-        };
-
-        string BuildProcedureArguments()
-        {
-            if (_parameters.Count == 0)
-                return string.Empty;
-
-            // Named parameter support check
-            if (_context.SupportsNamedParameters)
-            {
-                // Trust that dev has set correct names
-                return string.Join(", ", _parameters.Values.Select(p => _context.MakeParameterName(p)));
-            }
-
-            // Positional binding (e.g., SQLite, MySQL)
-            return string.Join(", ", Enumerable.Repeat("?", _parameters.Count));
-        }
     }
 
 
     private DbCommand PrepareCommand(ITrackedConnection conn, CommandType commandType, ExecutionType executionType)
     {
-        if (commandType == CommandType.TableDirect)
-        {
-            throw new NotSupportedException("TableDirect isn't supported.");
-        }
+        if (commandType == CommandType.TableDirect) throw new NotSupportedException("TableDirect isn't supported.");
 
-        if (Query.Length == 0)
-        {
-            throw new InvalidOperationException("SQL query is empty.");
-        }
+        if (Query.Length == 0) throw new InvalidOperationException("SQL query is empty.");
 
         OpenConnection(conn);
         var cmd = CreateCommand(conn);
@@ -264,15 +249,9 @@ public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
             throw new InvalidOperationException(
                 $"Query exceeds the maximum parameter limit of {_context.MaxParameterLimit} for {_context.DatabaseProductName}.");
 
-        foreach (var param in _parameters.Values)
-        {
-            cmd.Parameters.Add(param);
-        }
+        foreach (var param in _parameters.Values) cmd.Parameters.Add(param);
 
-        if (_context.PrepareStatements)
-        {
-            cmd.Prepare();
-        }
+        if (_context.PrepareStatements) cmd.Prepare();
 
         return cmd;
     }
@@ -285,7 +264,6 @@ public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
     private void Cleanup(DbCommand? cmd, ITrackedConnection? conn, ExecutionType executionType)
     {
         if (cmd != null)
-        {
             try
             {
                 cmd.Parameters?.Clear();
@@ -297,22 +275,13 @@ public class SqlContainer : SafeAsyncDisposableBase, ISqlContainer
                 _logger.LogWarning($"Command disposal failed: {ex.Message}");
                 // We're intentionally not retrying here anymore — disposal failure is generally harmless in this case
             }
-        }
 
         // Don't dispose read connections — they are left open until the reader disposes
         if (executionType == ExecutionType.Read)
             return;
 
-        if (_context is not TransactionContext && conn is not null)
-        {
-            _context.CloseAndDisposeConnection(conn);
-        }
+        if (_context is not TransactionContext && conn is not null) _context.CloseAndDisposeConnection(conn);
     }
-
-
-    public string WrapObjectName(string objectName) => _context.WrapObjectName(objectName);
-
-    public string MakeParameterName(DbParameter parameter) => _context.MakeParameterName(parameter);
 
     protected override void DisposeManaged()
     {

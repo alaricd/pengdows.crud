@@ -26,14 +26,13 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
 
     private long _connectionCount;
     private string _connectionSessionSettings;
+    private string _connectionString;
     private DataSourceInformation _dataSourceInfo;
+    private IIsolationResolver _isolationResolver;
     private bool _isReadConnection = true;
     private bool _isSqlServer;
     private bool _isWriteConnection = true;
     private long _maxNumberOfOpenConnections;
-    private string _connectionString;
-    private IIsolationResolver _isolationResolver;
-    public ReadWriteMode ReadWriteMode { get; }
 
     [Obsolete("Use the constructor that takes DatabaseContextConfiguration instead.")]
     public DatabaseContext(
@@ -75,7 +74,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
             (loggerFactory ?? NullLoggerFactory.Instance))
     {
     }
-   
+
     public DatabaseContext(
         IDatabaseContextConfiguration configuration,
         DbProviderFactory factory,
@@ -99,14 +98,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         }
     }
 
-
-    public bool IsReadOnlyConnection => _isReadConnection && !_isWriteConnection;
-    public bool RCSIEnabled { get; } 
-
-    public ILockerAsync GetLock()
-    {
-        return NoOpAsyncLocker.Instance;
-    }
+    public ReadWriteMode ReadWriteMode { get; }
 
     public string Name { get; set; }
 
@@ -117,9 +109,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         {
             //don't let it change
             if (!string.IsNullOrWhiteSpace(_connectionString) || string.IsNullOrWhiteSpace(value))
-            {
                 throw new ArgumentException($"Connection string reset attempted.");
-            }
 
             _connectionString = value;
         }
@@ -129,6 +119,15 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     private ITrackedConnection Connection => _connection ??
                                              throw new ObjectDisposedException(
                                                  "attempt to use single connection from the wrong mode.");
+
+
+    public bool IsReadOnlyConnection => _isReadConnection && !_isWriteConnection;
+    public bool RCSIEnabled { get; }
+
+    public ILockerAsync GetLock()
+    {
+        return NoOpAsyncLocker.Instance;
+    }
 
 
     public DbMode ConnectionMode { get; private set; }
@@ -145,10 +144,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         var qp = QuotePrefix;
         var qs = QuoteSuffix;
         var tmp = name?.Replace(qp, string.Empty)?.Replace(qs, string.Empty);
-        if (string.IsNullOrEmpty(tmp))
-        {
-            return string.Empty;
-        }
+        if (string.IsNullOrEmpty(tmp)) return string.Empty;
 
         var ss = tmp.Split(CompositeIdentifierSeparator);
 
@@ -163,71 +159,6 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         }
 
         return sb.ToString();
-    }
-
-    private ITrackedConnection FactoryCreateConnection(string? connectionString = null, bool isSharedConnection = false)
-    {
-        SanitizeConnectionString(connectionString);
-
-        var connection = _factory.CreateConnection();
-        connection.ConnectionString = ConnectionString;
-
-        var tracked = new TrackedConnection(
-            connection,
-            (sender, args) => //StateChangeHandler
-            {
-                var to = args.CurrentState;
-                var from = args.OriginalState;
-                switch (to)
-                {
-                    case ConnectionState.Open:
-                    {
-                        _logger.LogDebug("Opening connection: " + Name);
-                        var now = Interlocked.Increment(ref _connectionCount);
-                        UpdateMaxConnectionCount(now);
-                        break;
-                    }
-                    case ConnectionState.Closed:
-                    case ConnectionState.Broken:
-                        _logger.LogDebug("Closed or broken connection: " + Name);
-                        Interlocked.Decrement(ref _connectionCount);
-                        break;
-                }
-            },
-            onFirstOpen: ApplyConnectionSessionSettings,
-            onDispose: conn => { _logger.LogDebug("Connection disposed."); },
-            null,
-            isSharedConnection
-        );
-        return tracked;
-    }
-
-    private void SanitizeConnectionString(string? connectionString)
-    {
-        if (connectionString != null && string.IsNullOrWhiteSpace(ConnectionString))
-        {
-            //"Multiple Active Record Sets"
-            var csb = GetFactoryConnectionStringBuilder(connectionString);
-            var tmp = csb.ConnectionString;
-            this.ConnectionString = tmp;
-        }
-    }
-
-
-    private void UpdateMaxConnectionCount(long current)
-    {
-        long previous;
-        do
-        {
-            previous = Interlocked.Read(ref _maxNumberOfOpenConnections);
-            if (current <= previous)
-                return; // no update needed
-
-            // try to update only if no one else has changed it
-        } while (Interlocked.CompareExchange(
-                     ref _maxNumberOfOpenConnections,
-                     current,
-                     previous) != previous);
     }
 
 
@@ -261,19 +192,13 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     {
         var p = _factory.CreateParameter() ?? throw new InvalidOperationException("Failed to create parameter.");
 
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            name = GenerateRandomName();
-        }
+        if (string.IsNullOrWhiteSpace(name)) name = GenerateRandomName();
 
         var valueIsNull = Utils.IsNullOrDbNull(value);
         p.ParameterName = name;
         p.DbType = type;
         p.Value = valueIsNull ? DBNull.Value : value;
-        if (!valueIsNull && p.DbType == DbType.String && value is string s)
-        {
-            p.Size = Math.Max(s.Length, 1);
-        }
+        if (!valueIsNull && p.DbType == DbType.String && value is string s) p.Size = Math.Max(s.Length, 1);
 
         return p;
     }
@@ -306,10 +231,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         var anyOtherMax = validChars.Length;
 
         buffer[0] = validChars[Random.Shared.Next(firstCharMax)];
-        for (var i = 1; i < len; i++)
-        {
-            buffer[i] = validChars[Random.Shared.Next(anyOtherMax)];
-        }
+        for (var i = 1; i < len; i++) buffer[i] = validChars[Random.Shared.Next(anyOtherMax)];
 
         return new string(buffer);
     }
@@ -322,44 +244,18 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
 
     public void AssertIsReadConnection()
     {
-        if (!_isReadConnection)
-        {
-            throw new InvalidOperationException("The connection is not read connection.");
-        }
+        if (!_isReadConnection) throw new InvalidOperationException("The connection is not read connection.");
     }
 
     public void AssertIsWriteConnection()
     {
-        if (!_isWriteConnection)
-        {
-            throw new InvalidOperationException("The connection is not write connection.");
-        }
-    }
-
-    public async ValueTask CloseAndDisposeConnectionAsync(ITrackedConnection? connection)
-    {
-        if (connection == null)
-            return;
-
-        _logger.LogInformation($"Async Closing Connection in mode: {ConnectionMode}");
-
-        if (connection is IAsyncDisposable asyncConnection)
-        {
-            await asyncConnection.DisposeAsync().ConfigureAwait(false);
-        }
-        else
-        {
-            connection.Dispose();
-        }
+        if (!_isWriteConnection) throw new InvalidOperationException("The connection is not write connection.");
     }
 
 
     public void CloseAndDisposeConnection(ITrackedConnection? connection)
     {
-        if (connection == null)
-        {
-            return;
-        }
+        if (connection == null) return;
 
         _logger.LogInformation($"Connection mode is: {ConnectionMode}");
         switch (ConnectionMode)
@@ -421,6 +317,84 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
 
     public string QuoteSuffix => DataSourceInfo.QuoteSuffix;
 
+    private ITrackedConnection FactoryCreateConnection(string? connectionString = null, bool isSharedConnection = false)
+    {
+        SanitizeConnectionString(connectionString);
+
+        var connection = _factory.CreateConnection();
+        connection.ConnectionString = ConnectionString;
+
+        var tracked = new TrackedConnection(
+            connection,
+            (sender, args) => //StateChangeHandler
+            {
+                var to = args.CurrentState;
+                var from = args.OriginalState;
+                switch (to)
+                {
+                    case ConnectionState.Open:
+                    {
+                        _logger.LogDebug("Opening connection: " + Name);
+                        var now = Interlocked.Increment(ref _connectionCount);
+                        UpdateMaxConnectionCount(now);
+                        break;
+                    }
+                    case ConnectionState.Closed:
+                    case ConnectionState.Broken:
+                        _logger.LogDebug("Closed or broken connection: " + Name);
+                        Interlocked.Decrement(ref _connectionCount);
+                        break;
+                }
+            },
+            onFirstOpen: ApplyConnectionSessionSettings,
+            onDispose: conn => { _logger.LogDebug("Connection disposed."); },
+            null,
+            isSharedConnection
+        );
+        return tracked;
+    }
+
+    private void SanitizeConnectionString(string? connectionString)
+    {
+        if (connectionString != null && string.IsNullOrWhiteSpace(ConnectionString))
+        {
+            //"Multiple Active Record Sets"
+            var csb = GetFactoryConnectionStringBuilder(connectionString);
+            var tmp = csb.ConnectionString;
+            ConnectionString = tmp;
+        }
+    }
+
+
+    private void UpdateMaxConnectionCount(long current)
+    {
+        long previous;
+        do
+        {
+            previous = Interlocked.Read(ref _maxNumberOfOpenConnections);
+            if (current <= previous)
+                return; // no update needed
+
+            // try to update only if no one else has changed it
+        } while (Interlocked.CompareExchange(
+                     ref _maxNumberOfOpenConnections,
+                     current,
+                     previous) != previous);
+    }
+
+    public async ValueTask CloseAndDisposeConnectionAsync(ITrackedConnection? connection)
+    {
+        if (connection == null)
+            return;
+
+        _logger.LogInformation($"Async Closing Connection in mode: {ConnectionMode}");
+
+        if (connection is IAsyncDisposable asyncConnection)
+            await asyncConnection.DisposeAsync().ConfigureAwait(false);
+        else
+            connection.Dispose();
+    }
+
     private void CheckForSqlServerSettings(ITrackedConnection conn)
     {
         _isSqlServer =
@@ -472,10 +446,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
             recorded.TryGetValue(expectedKvp.Key, out var result);
             if (result != expectedKvp.Value)
             {
-                if (sb.Length > 0)
-                {
-                    sb.AppendLine();
-                }
+                if (sb.Length > 0) sb.AppendLine();
 
                 sb.Append($"SET {expectedKvp.Key} {expectedKvp.Value}");
             }
@@ -534,12 +505,10 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         }
         finally
         {
-            _isolationResolver ??= new IsolationResolver(this.Product, RCSIEnabled);
+            _isolationResolver ??= new IsolationResolver(Product, RCSIEnabled);
             if (mode == DbMode.Standard)
-            {
                 //if it is standard mode, we can close it.
                 conn?.Dispose();
-            }
         }
     }
 
@@ -590,12 +559,12 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
                 // has to be done in connection string, not session;
                 break;
 
-                //DB 2 can't be supported under modern .net 
-                //             case SupportedDatabase.Db2:
-                //                 _connectionSessionSettings = @"
-                //                  SET CURRENT DEGREE = 'ANY';
-                // ";
-                //                break;
+            //DB 2 can't be supported under modern .net 
+            //             case SupportedDatabase.Db2:
+            //                 _connectionSessionSettings = @"
+            //                  SET CURRENT DEGREE = 'ANY';
+            // ";
+            //                break;
 
             default:
                 _connectionSessionSettings = string.Empty;
@@ -610,7 +579,6 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     {
         _logger.LogInformation("Applying connection session settings");
         if (_applyConnectionSessionSettings)
-        {
             try
             {
                 using var cmd = connection.CreateCommand();
@@ -622,7 +590,6 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
                 _logger.LogError("Error setting session settings:" + ex.Message);
                 _applyConnectionSessionSettings = false;
             }
-        }
     }
 
     private ITrackedConnection GetStandardConnection(bool isShared = false)
@@ -639,10 +606,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
 
     private ITrackedConnection GetSingleWriterConnection(ExecutionType type, bool isShared = false)
     {
-        if (ExecutionType.Read == type)
-        {
-            return GetStandardConnection(isShared);
-        }
+        if (ExecutionType.Read == type) return GetStandardConnection(isShared);
 
         return GetSingleConnection();
     }
@@ -703,7 +667,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     //
     //     // unmanaged cleanup if needed (none currently)
     // }
-    
+
     protected override void DisposeManaged()
     {
         _connection?.Dispose();

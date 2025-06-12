@@ -1,14 +1,18 @@
+#region
+
 using System.Data;
 using pengdows.crud.enums;
+
+#endregion
 
 namespace pengdows.crud.isolation;
 
 public sealed class IsolationResolver : IIsolationResolver
 {
     private readonly SupportedDatabase _product;
+    private readonly Dictionary<IsolationProfile, IsolationLevel> _profileMap;
     private readonly bool _rcsi;
     private readonly HashSet<IsolationLevel> _supportedLevels;
-    private readonly Dictionary<IsolationProfile, IsolationLevel> _profileMap;
 
     public IsolationResolver(SupportedDatabase product, bool readCommittedSnapshotEnabled)
     {
@@ -21,16 +25,12 @@ public sealed class IsolationResolver : IIsolationResolver
     public IsolationLevel Resolve(IsolationProfile profile)
     {
         if (!_profileMap.TryGetValue(profile, out var level))
-        {
             throw new NotSupportedException($"Profile {profile} not supported for {_product}");
-        }
 
         if (!_rcsi && _product == SupportedDatabase.PostgreSql &&
             profile == IsolationProfile.SafeNonBlockingReads && level == IsolationLevel.ReadCommitted)
-        {
             throw new InvalidOperationException(
                 $"Tenant {_product} does not have RCSI enabled. Profile {profile} maps to blocking isolation level.");
-        }
 
         Validate(level);
         return level;
@@ -39,12 +39,13 @@ public sealed class IsolationResolver : IIsolationResolver
     public void Validate(IsolationLevel level)
     {
         if (!_supportedLevels.Contains(level))
-        {
             throw new InvalidOperationException($"Isolation level {level} not supported by {_product} (RCSI: {_rcsi})");
-        }
     }
 
-    public IReadOnlySet<IsolationLevel> GetSupportedLevels() => _supportedLevels;
+    public IReadOnlySet<IsolationLevel> GetSupportedLevels()
+    {
+        return _supportedLevels;
+    }
 
     private static HashSet<IsolationLevel> BuildSupportedIsolationLevels(SupportedDatabase db, bool rcsi)
     {

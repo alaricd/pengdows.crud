@@ -8,7 +8,13 @@ internal sealed class NoOpAsyncLocker : ILockerAsync
     {
     }
 
-    public Task LockAsync() => Task.CompletedTask;
+    public Task LockAsync()
+    {
+        return Task.CompletedTask;
+    }
 
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 }

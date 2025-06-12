@@ -1,10 +1,10 @@
 namespace pengdows.crud;
 
-public class TableInfo:ITableInfo
+public class TableInfo : ITableInfo
 {
+    public Dictionary<string, IColumnInfo> Columns { get; } = new();
     public string Schema { get; set; }
     public string Name { get; set; }
-    public Dictionary<string, IColumnInfo> Columns { get; } = new();
     public IColumnInfo Id { get; set; }
     public IColumnInfo Version { get; set; }
     public IColumnInfo LastUpdatedBy { get; set; }

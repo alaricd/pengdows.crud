@@ -83,7 +83,6 @@ public static class TypeCoercionHelper
 
         // DateTime from string
         if (sourceType == typeof(string) && targetType == typeof(DateTime) && value is string s)
-        {
             try
             {
                 return DateTime.Parse(s, CultureInfo.InvariantCulture,
@@ -93,7 +92,6 @@ public static class TypeCoercionHelper
             {
                 throw new InvalidCastException($"Cannot convert value '{value}' to type '{targetType}'.", ex);
             }
-        }
 
         try
         {

@@ -1,17 +1,21 @@
+#region
+
 using System.Data.Common;
 using System.Reflection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+#endregion
+
 namespace pengdows.crud.configuration;
 
 public class DbProviderLoader : IDbProviderLoader
 {
+    private static readonly object _lock = new();
+    private static readonly Dictionary<string, Assembly> _loadedAssemblies = new();
     private readonly IConfiguration _configuration;
     private readonly ILogger<DbProviderLoader> _logger;
-    private static readonly object _lock = new object();
-    private static readonly Dictionary<string, Assembly> _loadedAssemblies = new();
 
     public DbProviderLoader(IConfiguration configuration, ILogger<DbProviderLoader> logger)
     {
@@ -29,9 +33,7 @@ public class DbProviderLoader : IDbProviderLoader
             var providerKey = kvp.Key;
 
             if (string.IsNullOrEmpty(providerKey))
-            {
                 throw new InvalidOperationException($"ProviderName is missing for provider '{providerKey}'.");
-            }
 
             _logger.LogInformation("Loading DbProviderFactory for provider '{ProviderKey}'", providerKey);
 
@@ -77,7 +79,6 @@ public class DbProviderLoader : IDbProviderLoader
             lock (_lock)
             {
                 if (!_loadedAssemblies.TryGetValue(fullPath, out providerAssembly))
-                {
                     try
                     {
                         providerAssembly = Assembly.LoadFrom(fullPath);
@@ -94,7 +95,6 @@ public class DbProviderLoader : IDbProviderLoader
                             ex
                         );
                     }
-                }
             }
         }
         else if (!string.IsNullOrEmpty(config.AssemblyName))
@@ -102,7 +102,6 @@ public class DbProviderLoader : IDbProviderLoader
             lock (_lock)
             {
                 if (!_loadedAssemblies.TryGetValue(config.AssemblyName, out providerAssembly))
-                {
                     try
                     {
                         providerAssembly = Assembly.Load(config.AssemblyName);
@@ -119,7 +118,6 @@ public class DbProviderLoader : IDbProviderLoader
                             ex
                         );
                     }
-                }
             }
         }
 

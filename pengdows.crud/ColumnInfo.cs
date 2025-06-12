@@ -8,15 +8,15 @@ using System.Text.Json;
 
 namespace pengdows.crud;
 
-public class ColumnInfo:IColumnInfo
+public class ColumnInfo : IColumnInfo
 {
+    public Type? EnumType { get; set; }
     public string Name { get; init; }
     public PropertyInfo PropertyInfo { get; init; }
     public bool IsId { get; init; } = false;
     public DbType DbType { get; set; }
     public bool IsNonUpdateable { get; set; }
     public bool IsEnum { get; set; }
-    public Type? EnumType { get; set; }
     public bool IsJsonType { get; set; }
     public JsonSerializerOptions JsonSerializerOptions { get; set; } = JsonSerializerOptions.Default;
     public bool IsIdIsWritable { get; set; }
