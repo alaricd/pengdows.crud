@@ -1,5 +1,8 @@
-using Microsoft.Extensions.DependencyInjection;
+#region
+
 using pengdows.crud;
+
+#endregion
 
 namespace testbed;
 
@@ -7,11 +10,11 @@ public class TestProvider : IAsyncTestProvider
 {
     private readonly IDatabaseContext _context;
     private readonly EntityHelper<TestTable, long> _helper;
-    
+
     public TestProvider(IDatabaseContext databaseContext, IServiceProvider serviceProvider)
     {
-        _context = databaseContext;
-        _helper = new EntityHelper<TestTable, long>(databaseContext, serviceProvider.GetService<IAuditValueResolver>());
+        _context = databaseContext; //serviceProvider.GetService<IAuditValueResolver>()
+        _helper = new EntityHelper<TestTable, long>(databaseContext);
     }
 
 
@@ -55,7 +58,7 @@ public class TestProvider : IAsyncTestProvider
             Console.WriteLine("Failed to rollback transactions: " + count);
             throw new Exception("Failed to rollback transactions: " + count);
         }
-        
+
         await TestCommitTransaction();
         var count3 = await CountTestRows();
         if (count3 == count2)
@@ -81,7 +84,7 @@ public class TestProvider : IAsyncTestProvider
         transaction.Rollback();
     }
 
-    public virtual async Task<int> CountTestRows(IDatabaseContext? db= null)
+    public virtual async Task<int> CountTestRows(IDatabaseContext? db = null)
     {
         var ctx = db ?? _context;
         var sc = ctx.CreateSqlContainer();

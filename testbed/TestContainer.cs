@@ -1,9 +1,13 @@
+#region
+
 using System.Data.Common;
 using AdoNetCore.AseClient;
 using DotNet.Testcontainers.Containers;
 using FirebirdSql.Data.FirebirdClient;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
+
+#endregion
 
 namespace testbed;
 
@@ -73,7 +77,7 @@ public abstract class TestContainer : ITestContainer
                         UserID = orig.UserID,
                         Password = orig.Password,
                         Charset = orig.Charset,
-                        Pooling = false,
+                        Pooling = false
                     };
 
                     await using var createConn = instance.CreateConnection();
@@ -98,10 +102,7 @@ public abstract class TestContainer : ITestContainer
             catch (Exception ex)
             {
                 var currentError = ex.Message;
-                if (currentError != lastError)
-                {
-                    Console.WriteLine(currentError);
-                }
+                if (currentError != lastError) Console.WriteLine(currentError);
 
                 lastError = currentError;
                 await Task.Delay(1000);
@@ -113,10 +114,7 @@ public abstract class TestContainer : ITestContainer
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
-            return;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         await DisposeAsyncCore();
         GC.SuppressFinalize(this);

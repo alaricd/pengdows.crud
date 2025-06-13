@@ -1,3 +1,5 @@
+#region
+
 using System;
 using System.Data.Common;
 using System.Threading;
@@ -6,6 +8,8 @@ using Moq;
 using pengdows.crud.FakeDb;
 using pengdows.crud.wrappers;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests.wrappers;
 

@@ -1,4 +1,8 @@
+#region
+
 using pengdows.crud;
+
+#endregion
 
 namespace testbed.Sybase;
 
@@ -9,12 +13,11 @@ public class SybaseTestProvider : TestProvider
     public SybaseTestProvider(IDatabaseContext ctx, IServiceProvider svcs)
         : base(ctx, svcs)
     {
-        this.context = ctx;
+        context = ctx;
     }
 
     public override async Task CreateTable()
     {
-        
         var qp = context.QuotePrefix;
         var qs = context.QuoteSuffix;
         var tbl = $"{qp}test_table{qs}";

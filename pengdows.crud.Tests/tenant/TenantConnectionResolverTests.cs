@@ -1,8 +1,12 @@
+#region
+
 using System;
 using pengdows.crud.configuration;
 using pengdows.crud.enums;
 using pengdows.crud.tenant;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests.tenant;
 
@@ -82,7 +86,7 @@ public class TenantConnectionResolverTests
     }
 
     [Fact]
-    public void Register_MultipleTenants_Should_StoreAllConfigurations()
+    public void Register_MultipleTenants_Should_StoreAllConfigurations1()
     {
         // Arrange
         var tenantA = new TenantConfiguration

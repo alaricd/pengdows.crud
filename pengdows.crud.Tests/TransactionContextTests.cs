@@ -1,3 +1,5 @@
+#region
+
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -7,7 +9,11 @@ using pengdows.crud.configuration;
 using pengdows.crud.enums;
 using pengdows.crud.FakeDb;
 using Xunit;
- namespace pengdows.crud.Tests;
+
+#endregion
+
+namespace pengdows.crud.Tests;
+
 public class TransactionContextTests
 {
     private IDatabaseContext CreateContext(SupportedDatabase supportedDatabase)
@@ -19,7 +25,7 @@ public class TransactionContextTests
             ProviderName = supportedDatabase.ToString(),
             ConnectionString = $"Data Source=test;EmulatedProduct={supportedDatabase}"
         };
-         
+
         var dbContext = new DatabaseContext(config, factory);
         return dbContext;
     }
@@ -46,9 +52,7 @@ public class TransactionContextTests
     {
         var tx = CreateContext(supportedDatabase).BeginTransaction(IsolationLevel.ReadUncommitted);
         if (tx.IsolationLevel < IsolationLevel.Chaos)
-        {
             Console.WriteLine($"{supportedDatabase}:  {nameof(tx.IsolationLevel)}: {tx.IsolationLevel}");
-        }
 
         Assert.True(IsolationLevel.Chaos < tx.IsolationLevel); // upgraded due to ReadWrite
     }
@@ -89,11 +93,14 @@ public class TransactionContextTests
         await tx.DisposeAsync();
 
         Assert.True(tx.IsCompleted);
-    } 
-    public static IEnumerable<object[]> AllSupportedProviders() =>
-        Enum.GetValues<SupportedDatabase>()
+    }
+
+    public static IEnumerable<object[]> AllSupportedProviders()
+    {
+        return Enum.GetValues<SupportedDatabase>()
             .Where(p => p != SupportedDatabase.Unknown)
             .Select(p => new object[] { p });
+    }
 
     [Theory]
     [MemberData(nameof(AllSupportedProviders))]

@@ -1,13 +1,15 @@
+#region
+
 using System.Data;
 using pengdows.crud.attributes;
+
+#endregion
 
 namespace WebApplication1;
 
 public class UserEntity
 {
-    [Id]
-    [Column("Id", DbType.Int32)]
-    public int ID { get; set; }
+    [Id] [Column("Id", DbType.Int32)] public int ID { get; set; }
 
     [PrimaryKey]
     [Column("Email", DbType.String)]

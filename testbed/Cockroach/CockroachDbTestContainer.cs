@@ -1,10 +1,14 @@
-namespace testbed.Cockroach;
+#region
 
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using pengdows.crud;
-using DotNet.Testcontainers.Builders;
-using DotNet.Testcontainers.Containers;
+
+#endregion
+
+namespace testbed.Cockroach;
 
 public class CockroachDbTestContainer : TestContainer
 {

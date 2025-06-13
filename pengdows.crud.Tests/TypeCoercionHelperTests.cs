@@ -1,31 +1,18 @@
+#region
+
 using System;
+using System.Globalization;
 using System.Text.Json;
 using pengdows.crud.enums;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests;
 
 public class TypeCoercionHelperTests
 {
-    enum TestEnum
-    {
-        One,
-        Two,
-        Three
-    }
-
-    class CustomEntity
-    {
-        public CustomObject customObject { get; set; }
-    }
-
-    class CustomObject
-    {
-        public string Name { get; set; } = string.Empty;
-    }
-
-    private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
-        { PropertyNameCaseInsensitive = true };
+    private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     [Fact]
     public void Coerce_StringToInt_ReturnsInt()
@@ -50,8 +37,8 @@ public class TypeCoercionHelperTests
     {
         var input = "2023-04-30T10:00:00Z";
         var expected = DateTime.Parse(input, null,
-            System.Globalization.DateTimeStyles.AdjustToUniversal |
-            System.Globalization.DateTimeStyles.AssumeUniversal);
+            DateTimeStyles.AdjustToUniversal |
+            DateTimeStyles.AssumeUniversal);
         var result = TypeCoercionHelper.Coerce(input, typeof(string), typeof(DateTime));
 
         Assert.Equal(expected, result);
@@ -144,5 +131,22 @@ public class TypeCoercionHelperTests
     {
         Assert.Throws<InvalidCastException>(() =>
             TypeCoercionHelper.Coerce("hello", typeof(string), typeof(int)));
+    }
+
+    private enum TestEnum
+    {
+        One,
+        Two,
+        Three
+    }
+
+    private class CustomEntity
+    {
+        public CustomObject customObject { get; set; }
+    }
+
+    private class CustomObject
+    {
+        public string Name { get; set; } = string.Empty;
     }
 }

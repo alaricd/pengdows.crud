@@ -1,9 +1,11 @@
-namespace pengdows.crud.Tests;
+#region
 
 using System;
 using Xunit;
 
- 
+#endregion
+
+namespace pengdows.crud.Tests;
 
 public class StubAuditValueResolverTests
 {

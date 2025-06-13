@@ -1,3 +1,5 @@
+#region
+
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Data.Sqlite;
@@ -5,28 +7,31 @@ using Microsoft.IdentityModel.Tokens;
 using pengdows.crud;
 using WebApplication1;
 
+#endregion
+
 var builder = WebApplication.CreateBuilder(args);
 
 // === Configure Authentication ===
 builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.Authority = builder.Configuration["OAuth2:Authority"]; // e.g., https://login.microsoftonline.com/{tenant}/v2.0
-    options.Audience = builder.Configuration["OAuth2:Audience"];
-    options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,
-        ValidIssuer = builder.Configuration["OAuth2:Issuer"], // Optional override
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        NameClaimType = ClaimTypes.NameIdentifier,
-        RoleClaimType = ClaimTypes.Role
-    };
-});
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.Authority =
+            builder.Configuration["OAuth2:Authority"]; // e.g., https://login.microsoftonline.com/{tenant}/v2.0
+        options.Audience = builder.Configuration["OAuth2:Audience"];
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["OAuth2:Issuer"], // Optional override
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            NameClaimType = ClaimTypes.NameIdentifier,
+            RoleClaimType = ClaimTypes.Role
+        };
+    });
 
 // === Core Services for pengdows.crud ===
 builder.Services.AddHttpContextAccessor();
@@ -57,7 +62,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseAuthentication();     // ✅ must be BEFORE UseAuthorization
+app.UseAuthentication(); // ✅ must be BEFORE UseAuthorization
 app.UseAuthorization();
 
 app.MapControllers();

@@ -72,4 +72,5 @@
 // // record DbTableRequest(string Provider, string ConnectionString, string Schema, string Table);
 // // record TableInfo(string Table_Schema, string Table_Name);
 // // record ColumnInfo(string Column_Name, string Data_Type, string Is_Nullable, string Column_Default, int? Character_Maximum_Length);
+
 Console.WriteLine("hack");

@@ -9,8 +9,13 @@ public class UserService
         _helper = helper;
     }
 
-    public Task CreateAsync(UserEntity user) => _helper.CreateAsync(user);
+    public Task CreateAsync(UserEntity user)
+    {
+        return _helper.CreateAsync(user);
+    }
 
-    public Task<UserEntity?> FindByEmail(string email) =>
-        (_helper as UserEntityHelper)?.FindByEmail(email) ?? Task.FromResult<UserEntity?>(null);
+    public Task<UserEntity?> FindByEmail(string email)
+    {
+        return (_helper as UserEntityHelper)?.FindByEmail(email) ?? Task.FromResult<UserEntity?>(null);
+    }
 }

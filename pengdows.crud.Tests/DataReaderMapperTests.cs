@@ -1,20 +1,17 @@
-using System.Collections.Generic;
-using pengdows.crud.FakeDb;
+#region
+
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using pengdows.crud.FakeDb;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests;
 
 public class DataReaderMapperTests
 {
-    private class SampleEntity
-    {
-        public string Name { get; set; }
-        public int Age { get; set; }
-        public bool IsActive { get; set; }
-    }
-
     [Fact]
     public async Task LoadObjectsFromDataReaderAsync_MapsMatchingFields()
     {
@@ -90,5 +87,12 @@ public class DataReaderMapperTests
         Assert.Null(result[0].Name);
         Assert.Equal(0, result[0].Age); // default(int)
         Assert.False(result[0].IsActive); // default(bool)
+    }
+
+    private class SampleEntity
+    {
+        public string Name { get; set; }
+        public int Age { get; set; }
+        public bool IsActive { get; set; }
     }
 }

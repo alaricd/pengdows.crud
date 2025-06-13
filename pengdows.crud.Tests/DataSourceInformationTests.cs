@@ -1,14 +1,16 @@
+#region
+
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using pengdows.crud.enums;
 using pengdows.crud.FakeDb;
+using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests;
-
-using System.Collections.Generic;
-using Xunit;
-using crud;
-using enums;
 
 public static class DataSourceTestData
 {
@@ -19,14 +21,14 @@ public static class DataSourceTestData
             if (db == SupportedDatabase.Unknown) continue;
 
             var schema = DataSourceInformation.BuildEmptySchema(
-                productName: db.ToString(),
-                productVersion: "1.2.3",
-                parameterMarkerPattern: db == SupportedDatabase.Sqlite ? "@p[0-9]+" : "@[0-9]+",
-                parameterMarkerFormat: "@{0}",
-                parameterNameMaxLength: 64,
-                parameterNamePattern: @"@\\w+",
-                parameterNamePatternRegex: @"[@:]\w+",
-                supportsNamedParameters: db != SupportedDatabase.Sqlite
+                db.ToString(),
+                "1.2.3",
+                db == SupportedDatabase.Sqlite ? "@p[0-9]+" : "@[0-9]+",
+                "@{0}",
+                64,
+                @"@\\w+",
+                @"[@:]\w+",
+                db != SupportedDatabase.Sqlite
             );
 
             var versionSql = db switch
@@ -111,10 +113,10 @@ public class DataSourceInformationTests
             SupportedDatabase.Firebird => ProcWrappingStyle.ExecuteProcedure,
             _ => ProcWrappingStyle.None
         };
-        bool expectedRequiresStoredProcParameterNameMatch = db switch
+        var expectedRequiresStoredProcParameterNameMatch = db switch
         {
             SupportedDatabase.Firebird or SupportedDatabase.Sqlite or SupportedDatabase.SqlServer
-                 or SupportedDatabase.MySql or SupportedDatabase.MariaDb => false,
+                or SupportedDatabase.MySql or SupportedDatabase.MariaDb => false,
             SupportedDatabase.PostgreSql or SupportedDatabase.CockroachDb or SupportedDatabase.Oracle => true,
             _ => true
         };

@@ -1,9 +1,12 @@
+#region
+
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using pengdows.crud.configuration;
 using pengdows.crud.tenant;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests.tenant;
 

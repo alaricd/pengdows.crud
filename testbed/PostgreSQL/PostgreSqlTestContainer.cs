@@ -1,20 +1,23 @@
+#region
+
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
-
-namespace testbed;
-
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using pengdows.crud;
+
+#endregion
+
+namespace testbed;
 
 public class PostgreSqlTestContainer : TestContainer
 {
     private readonly IContainer _container;
     private string? _connectionString;
-    private string _password = "mysecretpassword";
-    private string _username = "postgres";
     private string _database = "postgres";
+    private string _password = "mysecretpassword";
     private int _port = 5432;
+    private string _username = "postgres";
 
     public PostgreSqlTestContainer()
     {
@@ -46,5 +49,8 @@ public class PostgreSqlTestContainer : TestContainer
             services.GetRequiredService<ITypeMapRegistry>());
     }
 
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+          await _container.DisposeAsync();
+    }
 }

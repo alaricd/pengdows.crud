@@ -1,12 +1,31 @@
+#region
+
 using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Xunit;
 
+#endregion
+
 namespace pengdows.crud.Tests;
 
 public class UtilsTests
 {
+    public static IEnumerable<object[]> ZeroValues => new List<object[]>
+    {
+        new object[] { (byte)0 },
+        new object[] { (sbyte)0 },
+        new object[] { (short)0 },
+        new object[] { (ushort)0 },
+        new object[] { 0 },
+        new object[] { 0u },
+        new object[] { 0L },
+        new object[] { 0UL },
+        new object[] { 0f },
+        new object[] { 0d },
+        new object[] { 0m }
+    };
+
     [Fact]
     public void IsNullOrDbNull_ReturnsTrueForNull()
     {
@@ -21,7 +40,7 @@ public class UtilsTests
         Assert.True(Utils.IsZeroNumeric(0.0));
         Assert.False(Utils.IsZeroNumeric(1));
     }
-    
+
     public static TAttribute GetAttributeFromProperty<TAttribute>(
         Type containerType,
         string nestedClassName,
@@ -38,7 +57,8 @@ public class UtilsTests
 
         var attr = propInfo.GetCustomAttribute<TAttribute>();
         if (attr == null)
-            throw new ArgumentException($"Attribute '{typeof(TAttribute).Name}' not found on property '{propertyName}'.");
+            throw new ArgumentException(
+                $"Attribute '{typeof(TAttribute).Name}' not found on property '{propertyName}'.");
 
         return attr;
     }
@@ -60,21 +80,6 @@ public class UtilsTests
     {
         Assert.False(Utils.IsNullOrDbNull("not null"));
     }
-
-    public static IEnumerable<object[]> ZeroValues => new List<object[]>
-    {
-        new object[] { (byte)0 },
-        new object[] { (sbyte)0 },
-        new object[] { (short)0 },
-        new object[] { (ushort)0 },
-        new object[] { 0 },
-        new object[] { 0u },
-        new object[] { 0L },
-        new object[] { 0UL },
-        new object[] { 0f },
-        new object[] { 0d },
-        new object[] { 0m },
-    };
 
     [Theory]
     [MemberData(nameof(ZeroValues))]
@@ -117,14 +122,22 @@ public class UtilsTests
     [Fact]
     public void IsNullOrEmpty_ReturnsTrue_ForEmptyEnumerable()
     {
-        IEnumerable<int> GetEmpty() { yield break; }
+        IEnumerable<int> GetEmpty()
+        {
+            yield break;
+        }
+
         Assert.True(Utils.IsNullOrEmpty(GetEmpty()));
     }
 
     [Fact]
     public void IsNullOrEmpty_ReturnsFalse_ForPopulatedEnumerable()
     {
-        IEnumerable<int> GetItems() { yield return 1; }
+        IEnumerable<int> GetItems()
+        {
+            yield return 1;
+        }
+
         Assert.False(Utils.IsNullOrEmpty(GetItems()));
     }
 }
