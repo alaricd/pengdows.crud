@@ -15,10 +15,10 @@ public class TenantServiceCollectionExtensionsTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Tenants:0:Name"] = "a",
-                ["Tenants:0:DatabaseContextConfiguration:ConnectionString"] = "Server=A;",
-                ["Tenants:1:Name"] = "b",
-                ["Tenants:1:DatabaseContextConfiguration:ConnectionString"] = "Server=B;"
+                ["MultiTenant:Tenants:0:Name"] = "a",
+                ["MultiTenant:Tenants:0:DatabaseContextConfiguration:ConnectionString"] = "Server=A;",
+                ["MultiTenant:Tenants:1:Name"] = "b",
+                ["MultiTenant:Tenants:1:DatabaseContextConfiguration:ConnectionString"] = "Server=B;"
             })
             .Build();
 
