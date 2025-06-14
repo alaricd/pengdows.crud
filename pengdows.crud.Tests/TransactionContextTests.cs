@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using pengdows.crud.configuration;
 using pengdows.crud.enums;
 using pengdows.crud.FakeDb;
+using pengdows.crud.threading;
 using Xunit;
 
 #endregion
@@ -177,5 +178,68 @@ public class TransactionContextTests
         var name = tx.GenerateRandomName(10);
         Assert.Throws<InvalidOperationException>(() => tx.BeginTransaction(null));
         Assert.True(char.IsLetter(name[0]));
+    }
+
+    [Fact]
+    public void BeginTransaction_WithIsolationProfile_Throws()
+    {
+        using var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
+        Assert.Throws<InvalidOperationException>(() => tx.BeginTransaction(IsolationProfile.ReadCommitted));
+    }
+
+    [Fact]
+    public void Commit_Twice_Throws()
+    {
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
+        tx.Commit();
+        Assert.Throws<InvalidOperationException>(() => tx.Commit());
+    }
+
+    [Fact]
+    public void Rollback_AfterCommit_Throws()
+    {
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
+        tx.Commit();
+        Assert.Throws<InvalidOperationException>(() => tx.Rollback());
+    }
+
+    [Fact]
+    public void Dispose_Uncommitted_RollsBack()
+    {
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
+        tx.Dispose();
+
+        Assert.True(tx.IsCompleted);
+        Assert.True(tx.WasRolledBack);
+    }
+
+    [Fact]
+    public async Task GetLock_ReturnsRealAsyncLocker()
+    {
+        var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
+        await using var locker = tx.GetLock();
+        Assert.IsType<RealAsyncLocker>(locker);
+        await locker.LockAsync();
+    }
+
+    [Fact]
+    public void MakeParameterName_ForwardsToContext()
+    {
+        var context = (DatabaseContext)CreateContext(SupportedDatabase.PostgreSql);
+        using var tx = context.BeginTransaction();
+        var param = context.CreateDbParameter("foo", DbType.Int32, 1);
+
+        Assert.Equal(context.MakeParameterName("foo"), tx.MakeParameterName("foo"));
+        Assert.Equal(context.MakeParameterName(param), tx.MakeParameterName(param));
+    }
+
+    [Fact]
+    public void ProcWrappingStyle_GetMatchesContext_SetterThrows()
+    {
+        var context = (DatabaseContext)CreateContext(SupportedDatabase.Sqlite);
+        using var tx = context.BeginTransaction();
+
+        Assert.Equal(context.ProcWrappingStyle, tx.ProcWrappingStyle);
+        Assert.Throws<NotImplementedException>(() => tx.ProcWrappingStyle = ProcWrappingStyle.Call);
     }
 }
