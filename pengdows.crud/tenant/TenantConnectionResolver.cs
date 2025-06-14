@@ -46,7 +46,10 @@ public class TenantConnectionResolver : ITenantConnectionResolver
 
     public static void Register(MultiTenantOptions options)
     {
-        if (options == null) throw new ArgumentNullException(nameof(options));
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
 
         Register(options.Tenants);
     }
