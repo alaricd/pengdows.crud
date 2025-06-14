@@ -1,3 +1,4 @@
+#region
 
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
@@ -5,16 +6,18 @@ using Microsoft.Extensions.DependencyInjection;
 using MySql.Data.MySqlClient;
 using pengdows.crud;
 
+#endregion
+
 namespace testbed;
 
 public class MariaDbContainer : TestContainer
 {
     private readonly IContainer _container;
     private string? _connectionString;
-    private string _password = "rootpassword";
-    private string _username = "root";
     private string _database = "testdb";
+    private string _password = "rootpassword";
     private int _port = 3306;
+    private string _username = "root";
 
     // $ docker run --detach --name some-mariadb --env MARIADB_USER=example-user --env MARIADB_PASSWORD=my_cool_secret
     // --env MARIADB_DATABASE=exmple-database --env MARIADB_ROOT_PASSWORD=my-secret-pw  mariadb:latest
@@ -26,8 +29,9 @@ public class MariaDbContainer : TestContainer
             .WithImage("mariadb:latest")
             .WithEnvironment("MARIADB_ROOT_PASSWORD", _password)
             .WithEnvironment("MARIADB_DATABASE", _database)
-             .WithEnvironment("MYSQL_SQL_MODE", "STRICT_ALL_TABLES,ONLY_FULL_GROUP_BY,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION,ANSI_QUOTES")
-             .WithPortBinding(_port, true)
+            .WithEnvironment("MYSQL_SQL_MODE",
+                "STRICT_ALL_TABLES,ONLY_FULL_GROUP_BY,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION,ANSI_QUOTES")
+            .WithPortBinding(_port, true)
             .WithExposedPort(_port)
             .Build();
     }
@@ -50,5 +54,8 @@ public class MariaDbContainer : TestContainer
             services.GetRequiredService<ITypeMapRegistry>());
     }
 
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+         await _container.DisposeAsync();
+    }
 }

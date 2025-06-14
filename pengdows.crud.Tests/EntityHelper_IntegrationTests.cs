@@ -1,8 +1,12 @@
+#region
+
 using System;
 using System.Linq;
 using System.Threading.Tasks;
 using pengdows.crud.enums;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests;
 
@@ -15,9 +19,9 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
         // Create an in-memory SQLite connection
         // _connection = new SqliteConnection("Data Source=:memory:");
         // _connection.Open();
-        base.TypeMap.Register<TestEntity>();
-        this.entityHelper = new EntityHelper<TestEntity, int>(Context, null);
-        
+        TypeMap.Register<TestEntity>();
+        entityHelper = new EntityHelper<TestEntity, int>(Context, null);
+
         Assert.Equal(DbMode.SingleConnection, Context.ConnectionMode);
         BuildTestTable();
     }
@@ -36,9 +40,9 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
         {
             Name = Guid.NewGuid().ToString()
         };
-        var c = this.entityHelper.BuildCreate(tmp);
+        var c = entityHelper.BuildCreate(tmp);
         await c.ExecuteNonQueryAsync();
-        var sc = this.entityHelper.BuildBaseRetrieve("a");
+        var sc = entityHelper.BuildBaseRetrieve("a");
         var list = await entityHelper.LoadListAsync(sc);
 
         Assert.True(list.Count > 0);
@@ -111,9 +115,9 @@ public class EntityHelper_IntegrationTests : SqlLiteContextTestBase
         {
             Name = Guid.NewGuid().ToString()
         };
-        var c = this.entityHelper.BuildCreate(tmp);
+        var c = entityHelper.BuildCreate(tmp);
         await c.ExecuteNonQueryAsync();
-        var sc = this.entityHelper.BuildBaseRetrieve("a");
+        var sc = entityHelper.BuildBaseRetrieve("a");
         var list = await entityHelper.LoadListAsync(sc);
 
         Assert.True(list.Count > 0);

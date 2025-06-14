@@ -1,3 +1,5 @@
+#region
+
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -10,14 +12,18 @@ using pengdows.crud.FakeDb;
 using pengdows.crud.wrappers;
 using Xunit;
 
+#endregion
+
 namespace pengdows.crud.Tests;
 
 public class DatabaseContextTests
 {
-    public static IEnumerable<object[]> AllSupportedProviders() =>
-        Enum.GetValues<SupportedDatabase>()
+    public static IEnumerable<object[]> AllSupportedProviders()
+    {
+        return Enum.GetValues<SupportedDatabase>()
             .Where(p => p != SupportedDatabase.Unknown)
             .Select(p => new object[] { p });
+    }
 
     [Theory]
     [MemberData(nameof(AllSupportedProviders))]
@@ -35,7 +41,7 @@ public class DatabaseContextTests
         var conn = context.GetConnection(ExecutionType.Read);
         Assert.NotNull(conn);
         Assert.Equal(ConnectionState.Closed, conn.State);
-        
+
         var schema = conn.GetSchema();
         Assert.NotNull(schema);
         Assert.True(schema.Rows.Count > 0);
@@ -101,7 +107,8 @@ public class DatabaseContextTests
     public void AssertIsWriteConnection_WhenFalse_Throws(SupportedDatabase product)
     {
         var factory = new FakeDbFactory(product);
-        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, readWriteMode: ReadWriteMode.ReadOnly);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory,
+            readWriteMode: ReadWriteMode.ReadOnly);
         Assert.Throws<InvalidOperationException>(() => context.AssertIsWriteConnection());
     }
 
@@ -110,12 +117,14 @@ public class DatabaseContextTests
     public void AssertIsReadConnection_WhenFalse_Throws(SupportedDatabase product)
     {
         var factory = new FakeDbFactory(product);
-        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, readWriteMode: ReadWriteMode.WriteOnly);
+        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory,
+            readWriteMode: ReadWriteMode.WriteOnly);
         Assert.Throws<InvalidOperationException>(() => context.AssertIsReadConnection());
     }
-    
+
     public static IEnumerable<object[]> ProvidersWithSettings()
-        => new List<object[]>
+    {
+        return new List<object[]>
         {
             new object[] { SupportedDatabase.SqlServer, false },
             new object[] { SupportedDatabase.MySql, true },
@@ -126,6 +135,7 @@ public class DatabaseContextTests
             new object[] { SupportedDatabase.Sqlite, true },
             new object[] { SupportedDatabase.Firebird, false }
         };
+    }
 
     [Theory]
     [MemberData(nameof(ProvidersWithSettings))]
@@ -135,13 +145,9 @@ public class DatabaseContextTests
         var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory);
         var preamble = context.SessionSettingsPreamble;
         if (expectSettings)
-        {
             Assert.False(string.IsNullOrWhiteSpace(preamble));
-        }
         else
-        {
             Assert.True(string.IsNullOrWhiteSpace(preamble));
-        }
     }
 
     [Fact]
@@ -149,7 +155,8 @@ public class DatabaseContextTests
     {
         var product = SupportedDatabase.SqlServer;
         var factory = new FakeDbFactory(product);
-        var context = new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, mode: DbMode.Standard);
+        var context =
+            new DatabaseContext($"Data Source=test;EmulatedProduct={product}", factory, mode: DbMode.Standard);
         Assert.Equal(DbMode.Standard, context.ConnectionMode);
         var conn = context.GetConnection(ExecutionType.Read);
         conn.Open();

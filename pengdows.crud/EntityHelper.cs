@@ -19,16 +19,16 @@ public class EntityHelper<TEntity, TRowID> :
 {
     // Cache for compiled property setters
     private static readonly ConcurrentDictionary<PropertyInfo, Action<object, object?>> _propertySetters = new();
+    private readonly IAuditValueResolver? _auditValueResolver;
     private readonly IDatabaseContext _context;
 
     private readonly IColumnInfo? _idColumn;
 
     // private readonly IServiceProvider _serviceProvider;
     private readonly ITableInfo _tableInfo;
+    private readonly Type? _userFieldType = null;
 
     private readonly IColumnInfo? _versionColumn;
-    private readonly Type? _userFieldType = null;
-    private readonly IAuditValueResolver? _auditValueResolver;
 
     public EntityHelper(IDatabaseContext databaseContext,
         EnumParseFailureMode enumParseBehavior = EnumParseFailureMode.Throw
@@ -44,10 +44,7 @@ public class EntityHelper<TEntity, TRowID> :
                 c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
                 c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
             )?.PropertyInfo.PropertyType;
-        if (propertyInfoPropertyType != null)
-        {
-            _userFieldType = propertyInfoPropertyType;
-        }
+        if (propertyInfoPropertyType != null) _userFieldType = propertyInfoPropertyType;
 
         WrappedTableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
                                ? WrapObjectName(_tableInfo.Schema) +
@@ -75,10 +72,7 @@ public class EntityHelper<TEntity, TRowID> :
                 c.PropertyInfo.GetCustomAttribute<CreatedByAttribute>() != null ||
                 c.PropertyInfo.GetCustomAttribute<LastUpdatedByAttribute>() != null
             )?.PropertyInfo.PropertyType;
-        if (propertyInfoPropertyType != null)
-        {
-            _userFieldType = propertyInfoPropertyType;
-        }
+        if (propertyInfoPropertyType != null) _userFieldType = propertyInfoPropertyType;
 
         WrappedTableName = (!string.IsNullOrEmpty(_tableInfo.Schema)
                                ? WrapObjectName(_tableInfo.Schema) +
@@ -98,25 +92,6 @@ public class EntityHelper<TEntity, TRowID> :
     public string MakeParameterName(DbParameter p)
     {
         return _context.MakeParameterName(p);
-    }
-
-
-    public Action<object, object?> GetOrCreateSetter(PropertyInfo prop)
-    {
-        return _propertySetters.GetOrAdd(prop, p =>
-        {
-            var objParam = Expression.Parameter(typeof(object));
-            var valueParam = Expression.Parameter(typeof(object));
-
-            var castObj = Expression.Convert(objParam, p.DeclaringType!);
-            var castValue = Expression.Convert(valueParam, p.PropertyType);
-
-            var propertyAccess = Expression.Property(castObj, p);
-            var assignment = Expression.Assign(propertyAccess, castValue);
-
-            var lambda = Expression.Lambda<Action<object, object?>>(assignment, objParam, valueParam);
-            return lambda.Compile();
-        });
     }
 
     public TEntity MapReaderToObject(ITrackedReader reader)
@@ -149,42 +124,6 @@ public class EntityHelper<TEntity, TRowID> :
     }
 
 
-    public Task<TEntity?> RetrieveOneAsync(TEntity objectToRetrieve, IDatabaseContext? context = null)
-    {
-        var ctx = context ?? _context;
-        var id = (TRowID)_idColumn.PropertyInfo.GetValue(objectToRetrieve);
-        var list = new List<TRowID>() { id };
-        var sc = BuildRetrieve(list, null, ctx);
-        return LoadSingleAsync(sc);
-    }
-
-    public async Task<TEntity?> LoadSingleAsync(ISqlContainer sc)
-    {
-        await using var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
-        if (await reader.ReadAsync().ConfigureAwait(false)) return MapReaderToObject(reader);
-
-        return null;
-    }
-
-    public async Task<List<TEntity>> LoadListAsync(ISqlContainer sc)
-    {
-        var list = new List<TEntity>();
-
-        await using var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
-
-        while (await reader.ReadAsync().ConfigureAwait(false))
-        {
-            var obj = MapReaderToObject(reader);
-            if (obj != null)
-            {
-                list.Add(obj);
-            }
-        }
-
-        return list;
-    }
-
-
     public ISqlContainer BuildCreate(TEntity objectToCreate, IDatabaseContext? context = null)
     {
         if (objectToCreate == null)
@@ -208,9 +147,7 @@ public class EntityHelper<TEntity, TRowID> :
             if (_auditValueResolver == null &&
                 (column.IsCreatedBy || column.IsCreatedOn || column.IsLastUpdatedBy || column.IsLastUpdatedOn) &&
                 Utils.IsNullOrDbNull(value))
-            {
                 continue;
-            }
 
             if (columns.Length > 0)
             {
@@ -262,12 +199,90 @@ public class EntityHelper<TEntity, TRowID> :
             wrappedAlias,
             WrapObjectName(col.Name)))));
         sb.Append("\nFROM ").Append(WrappedTableName);
-        if (wrappedAlias.Length > 0)
+        if (wrappedAlias.Length > 0) sb.Append($" {wrappedAlias.Substring(0, wrappedAlias.Length - 1)}");
+
+        return sc;
+    }
+
+    public ISqlContainer BuildDelete(TRowID id, IDatabaseContext? context = null)
+    {
+        var ctx = context ?? _context;
+        var sc = ctx.CreateSqlContainer();
+
+        var idCol = _idColumn;
+        if (idCol == null)
+            throw new InvalidOperationException($"row identity column for table {WrappedTableName} not found");
+
+        var p = _context.CreateDbParameter(idCol.DbType, id);
+        sc.AddParameter(p);
+
+        sc.Query.Append("DELETE FROM ")
+            .Append(WrappedTableName)
+            .Append(" WHERE ")
+            .Append(WrapObjectName(idCol.Name));
+        if (Utils.IsNullOrDbNull(p.Value))
         {
-            sb.Append($" {wrappedAlias.Substring(0, wrappedAlias.Length - 1)}");
+            sc.Query.Append(" IS NULL ");
+        }
+        else
+        {
+            sc.Query.Append(" = ");
+            sc.Query.Append(MakeParameterName(p));
         }
 
         return sc;
+    }
+
+
+    public Action<object, object?> GetOrCreateSetter(PropertyInfo prop)
+    {
+        return _propertySetters.GetOrAdd(prop, p =>
+        {
+            var objParam = Expression.Parameter(typeof(object));
+            var valueParam = Expression.Parameter(typeof(object));
+
+            var castObj = Expression.Convert(objParam, p.DeclaringType!);
+            var castValue = Expression.Convert(valueParam, p.PropertyType);
+
+            var propertyAccess = Expression.Property(castObj, p);
+            var assignment = Expression.Assign(propertyAccess, castValue);
+
+            var lambda = Expression.Lambda<Action<object, object?>>(assignment, objParam, valueParam);
+            return lambda.Compile();
+        });
+    }
+
+
+    public Task<TEntity?> RetrieveOneAsync(TEntity objectToRetrieve, IDatabaseContext? context = null)
+    {
+        var ctx = context ?? _context;
+        var id = (TRowID)_idColumn.PropertyInfo.GetValue(objectToRetrieve);
+        var list = new List<TRowID>() { id };
+        var sc = BuildRetrieve(list, null, ctx);
+        return LoadSingleAsync(sc);
+    }
+
+    public async Task<TEntity?> LoadSingleAsync(ISqlContainer sc)
+    {
+        await using var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
+        if (await reader.ReadAsync().ConfigureAwait(false)) return MapReaderToObject(reader);
+
+        return null;
+    }
+
+    public async Task<List<TEntity>> LoadListAsync(ISqlContainer sc)
+    {
+        var list = new List<TEntity>();
+
+        await using var reader = await sc.ExecuteReaderAsync().ConfigureAwait(false);
+
+        while (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            var obj = MapReaderToObject(reader);
+            if (obj != null) list.Add(obj);
+        }
+
+        return list;
     }
 
     public ISqlContainer BuildRetrieve(IReadOnlyCollection<TRowID>? listOfIds = null,
@@ -277,10 +292,8 @@ public class EntityHelper<TEntity, TRowID> :
         var sc = BuildBaseRetrieve(alias, ctx);
         var wrappedAlias = "";
         if (!string.IsNullOrWhiteSpace(alias))
-        {
             wrappedAlias = WrapObjectName(alias) +
                            _context.CompositeIdentifierSeparator;
-        }
 
         var wrappedColumnName = wrappedAlias +
                                 WrapObjectName(_idColumn.Name);
@@ -326,23 +339,16 @@ public class EntityHelper<TEntity, TRowID> :
     public void BuildWhereByPrimaryKey(IReadOnlyCollection<TEntity>? listOfObjects, ISqlContainer sc, string alias = "")
     {
         if (Utils.IsNullOrEmpty(listOfObjects) || sc == null)
-        {
             throw new ArgumentException("List of objects cannot be null or empty.");
-        }
 
         var listOfPrimaryKeys = _tableInfo.Columns.Values.Where(o => o.IsPrimaryKey).ToList();
-        if (listOfPrimaryKeys.Count < 1)
-        {
-            throw new Exception($"No primary keys found for type {typeof(TEntity).Name}");
-        }
+        if (listOfPrimaryKeys.Count < 1) throw new Exception($"No primary keys found for type {typeof(TEntity).Name}");
 
         // Calculate total parameter count to avoid exceeding DB limits
         var pc = sc.ParameterCount;
         var numberOfParametersToBeAdded = listOfObjects?.Count * listOfPrimaryKeys.Count;
         if ((pc + numberOfParametersToBeAdded) > _context.MaxParameterLimit)
-        {
             throw new TooManyParametersException("Too many parameters", _context.MaxParameterLimit);
-        }
 
         var sb = new StringBuilder();
         var pp = new List<DbParameter>();
@@ -356,19 +362,13 @@ public class EntityHelper<TEntity, TRowID> :
         var i = 0;
         foreach (var entity in listOfObjects)
         {
-            if (i > 0)
-            {
-                sb.Append(" OR ");
-            }
+            if (i > 0) sb.Append(" OR ");
 
             sb.Append("(");
 
             for (var j = 0; j < listOfPrimaryKeys.Count; j++)
             {
-                if (j > 0)
-                {
-                    sb.Append(" AND ");
-                }
+                if (j > 0) sb.Append(" AND ");
 
                 var pk = listOfPrimaryKeys[j];
                 var value = pk.MakeParameterValueFromField(entity);
@@ -395,10 +395,7 @@ public class EntityHelper<TEntity, TRowID> :
             i++;
         }
 
-        if (sb.Length < 1)
-        {
-            return;
-        }
+        if (sb.Length < 1) return;
 
         // Add all generated parameters to the container
         sc.AddParameters(pp);
@@ -406,13 +403,9 @@ public class EntityHelper<TEntity, TRowID> :
         // Determine how to append WHERE/AND clause
         var query = sc.Query.ToString();
         if (!query.Contains("WHERE ", StringComparison.OrdinalIgnoreCase))
-        {
             sc.Query.Append("\n WHERE ");
-        }
         else
-        {
             sc.Query.Append("\n AND ");
-        }
 
         // Final WHERE clause with grouped filters
         sc.Query.Append(sb);
@@ -454,9 +447,7 @@ public class EntityHelper<TEntity, TRowID> :
                 //Skip columns that should never be directly updated
                 //the version column, rowId and columns we have marked 
                 //as non-updateable, also of course we should NEVER update "created" columns
-            {
                 continue;
-            }
 
             var newValue = column.MakeParameterValueFromField(objectToUpdate);
             var originalValue = loadOriginal ? column.MakeParameterValueFromField(original) : null;
@@ -480,11 +471,9 @@ public class EntityHelper<TEntity, TRowID> :
         }
 
         if (_versionColumn != null)
-        {
             //this should be updated to wrap other patterns.
             setClause.Append(
                 $", {WrapObjectName(_versionColumn.Name)} = {WrapObjectName(_versionColumn.Name)} + 1");
-        }
 
         if (setClause.Length == 0)
             throw new InvalidOperationException("No changes detected for update.");
@@ -521,50 +510,17 @@ public class EntityHelper<TEntity, TRowID> :
         return sc;
     }
 
-    public ISqlContainer BuildDelete(TRowID id, IDatabaseContext? context = null)
-    {
-        var ctx = context ?? _context;
-        var sc = ctx.CreateSqlContainer();
-
-        var idCol = _idColumn;
-        if (idCol == null)
-            throw new InvalidOperationException($"row identity column for table {WrappedTableName} not found");
-
-        var p = _context.CreateDbParameter(idCol.DbType, id);
-        sc.AddParameter(p);
-
-        sc.Query.Append("DELETE FROM ")
-            .Append(WrappedTableName)
-            .Append(" WHERE ")
-            .Append(WrapObjectName(idCol.Name));
-        if (Utils.IsNullOrDbNull(p.Value))
-        {
-            sc.Query.Append(" IS NULL ");
-        }
-        else
-        {
-            sc.Query.Append(" = ");
-            sc.Query.Append(MakeParameterName(p));
-        }
-
-        return sc;
-    }
-
 
     public ISqlContainer BuildWhere(string wrappedColumnName, IEnumerable<TRowID> ids, ISqlContainer sqlContainer)
     {
         var enumerable = ids?.Distinct().ToList();
-        if (Utils.IsNullOrEmpty(enumerable))
-        {
-            return sqlContainer;
-        }
+        if (Utils.IsNullOrEmpty(enumerable)) return sqlContainer;
 
 
         var hasNull = enumerable.Any(v => Utils.IsNullOrDbNull(v));
         var sb = new StringBuilder();
         var dbType = _idColumn!.DbType;
         foreach (var id in enumerable)
-        {
             if (!hasNull || !Utils.IsNullOrDbNull(id))
             {
                 if (sb.Length > 0) sb.Append(", ");
@@ -573,7 +529,6 @@ public class EntityHelper<TEntity, TRowID> :
                 var name = MakeParameterName(p);
                 sb.Append(name);
             }
-        }
 
         if (sb.Length > 0)
         {
@@ -599,10 +554,7 @@ public class EntityHelper<TEntity, TRowID> :
             return;
 
         var auditValues = _auditValueResolver.Resolve();
-        if (auditValues == null)
-        {
-            return;
-        }
+        if (auditValues == null) return;
 
         // Always update last-modified
         _tableInfo.LastUpdatedBy?.PropertyInfo?.SetValue(obj, auditValues.UserId);

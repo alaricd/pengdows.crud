@@ -1,27 +1,29 @@
+#region
+
 using System.Data.Common;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
-using Microsoft.Extensions.DependencyInjection;
-
-using pengdows.crud;
 using FirebirdSql.Data.FirebirdClient;
- 
+using Microsoft.Extensions.DependencyInjection;
+using pengdows.crud;
+
+#endregion
+
 namespace testbed;
 
 public class FirebirdSqlTestContainer : TestContainer
 {
     private readonly IContainer _container;
-    private string? _connectionString;
-    private string _password = "mysecretpassword";
-    private string _username = "SYSDBA";
-    private string _database = "/var/lib/firebird/data/testdb.fdb"; //"/firebird/data/testdb.fdb";
     private readonly DbProviderFactory _factory = FirebirdClientFactory.Instance;
+    private string? _connectionString;
+    private string _database = "/var/lib/firebird/data/testdb.fdb"; //"/firebird/data/testdb.fdb";
+    private string _password = "mysecretpassword";
 
     private int _port = 3050;
+    private string _username = "SYSDBA";
 
     public FirebirdSqlTestContainer()
     {
-        
         //FIREBIRD_ROOT_PASSWORD
         // 
         // Firebird installer generates a one-off password for SYSDBA and stores it in /opt/firebird/SYSDBA.password.
@@ -50,7 +52,7 @@ public class FirebirdSqlTestContainer : TestContainer
         try
         {
             await _container.StartAsync();
-           var hostPort = _container.GetMappedPublicPort(_port);
+            var hostPort = _container.GetMappedPublicPort(_port);
 
             _connectionString = new FbConnectionStringBuilder
             {
@@ -65,7 +67,7 @@ public class FirebirdSqlTestContainer : TestContainer
                 CommandTimeout = 30
             }.ToString();
             Console.WriteLine($"Connecting to {_connectionString}");
-            
+
             await WaitForDbToStart(_factory, _connectionString, _container);
         }
         catch (Exception ex)
@@ -83,5 +85,8 @@ public class FirebirdSqlTestContainer : TestContainer
             services.GetRequiredService<ITypeMapRegistry>());
     }
 
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await _container.DisposeAsync();
+    }
 }

@@ -1,6 +1,11 @@
+#region
+
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
+using System.Threading;
+
+#endregion
 
 namespace pengdows.crud;
 
@@ -25,10 +30,7 @@ public static class DataReaderMapper
         for (var i = 0; i < reader.FieldCount; i++)
         {
             var name = reader.GetName(i);
-            if (props.TryGetValue(name, out var prop))
-            {
-                propertyMap.Add((i, prop));
-            }
+            if (props.TryGetValue(name, out var prop)) propertyMap.Add((i, prop));
         }
 
         while (await rdr.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -37,10 +39,8 @@ public static class DataReaderMapper
 
             foreach (var (ordinal, prop) in propertyMap)
             {
-                if (await rdr.IsDBNullAsync(ordinal, cancellationToken).ConfigureAwait(false))
-                {
-                    continue;
-                }
+                if (await rdr.IsDBNullAsync((int)ordinal, (CancellationToken)cancellationToken)
+                        .ConfigureAwait(false)) continue;
 
                 try
                 {

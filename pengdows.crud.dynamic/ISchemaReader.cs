@@ -1,4 +1,8 @@
+#region
+
 using WebApplication1.Generator;
+
+#endregion
 
 namespace pengdows.crud.dynamic.DynamicPocoGenerator;
 

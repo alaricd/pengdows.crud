@@ -1,4 +1,4 @@
-namespace testbed.Sybase;
+#region
 
 using System;
 using System.Threading.Tasks;
@@ -8,13 +8,17 @@ using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using pengdows.crud;
 
+#endregion
+
+namespace testbed.Sybase;
+
 public class SybaseTestContainer : TestContainer, ITestContainer
 {
-    private string? _connectionString;
-    private readonly IContainer _container;
     private const string Username = "sa";
     private const string Password = "MyStr0ngP@ssw0rd";
     private const string Database = "testdb";
+    private readonly IContainer _container;
+    private string? _connectionString;
 
     public SybaseTestContainer()
     {

@@ -1,4 +1,8 @@
+#region
+
 using pengdows.crud;
+
+#endregion
 
 namespace testbed.Cockroach;
 
@@ -6,7 +10,8 @@ public class CockroadDbTestProvider : TestProvider
 {
     private readonly IDatabaseContext context;
 
-    public CockroadDbTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context, serviceProvider)
+    public CockroadDbTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context,
+        serviceProvider)
     {
         this.context = context;
     }

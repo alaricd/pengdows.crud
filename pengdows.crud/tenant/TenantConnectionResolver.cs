@@ -5,9 +5,8 @@ namespace pengdows.crud.tenant;
 
 public class TenantConnectionResolver : ITenantConnectionResolver
 {
-    public static ITenantConnectionResolver Instance { get; } = new TenantConnectionResolver();
-
     private static readonly ConcurrentDictionary<string, DatabaseContextConfiguration> _configurations = new();
+    public static ITenantConnectionResolver Instance { get; } = new TenantConnectionResolver();
 
     public IDatabaseContextConfiguration GetDatabaseContextConfiguration(string tenant)
     {

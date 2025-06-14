@@ -1,3 +1,4 @@
+#region
 
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
@@ -5,15 +6,17 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using pengdows.crud;
 
+#endregion
+
 namespace testbed;
 
-public class SqlServerTestContainer: TestContainer
+public class SqlServerTestContainer : TestContainer
 {
     private readonly IContainer _container;
     private string? _connectionString;
+    private string _database = "testdb";
     private string _password = "YourPassword123";
     private string _username = "sa";
-    private string _database = "testdb";
 
     //docker run -e 'ACCEPT_EULA=Y' -e 'MSSQL_SA_PASSWORD=YourPassword123' -p 1433:1433 --name sql_server_container -d mcr.microsoft.com/mssql/server
 
@@ -50,7 +53,7 @@ public class SqlServerTestContainer: TestContainer
         //this gyration parses and scrubs the connectoin string.
         csb.ConnectionString = connectionString;
         connection.ConnectionString = csb.ConnectionString;
-        
+
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = $"IF DB_ID('{_database}') IS NULL CREATE DATABASE [{_database}]";
@@ -69,5 +72,8 @@ public class SqlServerTestContainer: TestContainer
             services.GetRequiredService<ITypeMapRegistry>());
     }
 
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+          await _container.DisposeAsync();
+    }
 }

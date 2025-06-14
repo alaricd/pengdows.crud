@@ -1,5 +1,9 @@
+#region
+
 using System.Data;
 using pengdows.crud.enums;
+
+#endregion
 
 namespace pengdows.crud.isolation;
 
@@ -57,14 +61,10 @@ public class IsolationLevelSupport
     public void Validate(SupportedDatabase db, IsolationLevel level)
     {
         if (!SupportedIsolationLevels.TryGetValue(db, out var levels))
-        {
             throw new NotSupportedException($"Isolation level support not defined for database: {db}");
-        }
 
         if (!levels.Contains(level))
-        {
             throw new InvalidOperationException(
                 $"Isolation level {level} is not supported by {db}. Allowed: {string.Join(", ", levels)}");
-        }
     }
 }

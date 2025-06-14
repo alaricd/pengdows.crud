@@ -1,35 +1,38 @@
+#region
+
 using pengdows.crud.exceptions;
 using Xunit;
 
-namespace pengdows.crud.Tests
+#endregion
+
+namespace pengdows.crud.Tests;
+
+public class TooManyColumnsTests
 {
-    public class TooManyColumnsTests
+    [Fact]
+    public void Constructor_SetsMessageCorrectly()
     {
-        [Fact]
-        public void Constructor_SetsMessageCorrectly()
-        {
-            // Arrange
-            var message = "Too many columns were found";
+        // Arrange
+        var message = "Too many columns were found";
 
-            // Act
-            var ex = new TooManyColumns(message);
+        // Act
+        var ex = new TooManyColumns(message);
 
-            // Assert
-            Assert.Equal(message, ex.Message);
-        }
+        // Assert
+        Assert.Equal(message, ex.Message);
+    }
 
-        [Fact]
-        public async void CanBeThrownAndCaught()
-        {
-            // Arrange
-            var message = "Too many columns were found";
+    [Fact]
+    public async void CanBeThrownAndCaught()
+    {
+        // Arrange
+        var message = "Too many columns were found";
 
-            // Act & Assert
-            var thrown = await Record.ExceptionAsync(() => throw new TooManyColumns(message));
-        
-            Assert.NotNull(thrown);
-            Assert.IsType<TooManyColumns>(thrown);
-            Assert.Equal(message, thrown.Message);
-        }
+        // Act & Assert
+        var thrown = await Record.ExceptionAsync(() => throw new TooManyColumns(message));
+
+        Assert.NotNull(thrown);
+        Assert.IsType<TooManyColumns>(thrown);
+        Assert.Equal(message, thrown.Message);
     }
 }

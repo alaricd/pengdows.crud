@@ -1,19 +1,23 @@
+#region
+
 using DotNet.Testcontainers.Builders;
 using Microsoft.Extensions.DependencyInjection;
 using Oracle.ManagedDataAccess.Client;
 using pengdows.crud;
 using IContainer = DotNet.Testcontainers.Containers.IContainer;
 
+#endregion
+
 namespace testbed;
 
 public class OracleTestContainer : TestContainer
 {
-    private readonly IContainer _container;
-    private string? _connectionString;
     private const string _password = "mysecurepassword";
     private const string _username = "system";
     private const string _sid = "XE"; // confirmed from inspect (ORACLE_SID=XE)
     private const int _port = 1521;
+    private readonly IContainer _container;
+    private string? _connectionString;
 
     public OracleTestContainer()
     {
@@ -51,7 +55,7 @@ public class OracleTestContainer : TestContainer
         //     await Task.Delay(1000);
         // }
         // Wait until the DB is accepting connections and SELECT 1 succeeds
-        await base.WaitForDbToStart(OracleClientFactory.Instance, _connectionString, _container, 300);
+        await WaitForDbToStart(OracleClientFactory.Instance, _connectionString, _container, 300);
     }
 
     public override async Task<IDatabaseContext> GetDatabaseContextAsync(IServiceProvider services)
@@ -63,5 +67,8 @@ public class OracleTestContainer : TestContainer
             services.GetRequiredService<ITypeMapRegistry>());
     }
 
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+          await _container.DisposeAsync();
+    }
 }

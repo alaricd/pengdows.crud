@@ -1,6 +1,10 @@
+#region
+
 using System;
 using System.Data;
 using pengdows.crud.attributes;
+
+#endregion
 
 [Table("test_table")]
 public class TestTable
@@ -12,31 +16,27 @@ public class TestTable
     [EnumColumn(typeof(NameEnum))]
     public NameEnum? Name { get; set; }
 
-    [Column("description", DbType.String)]
-    public string? Description { get; set; }
+    [Column("description", DbType.String)] public string? Description { get; set; }
 
     [CreatedOn]
     [Column("created_at", DbType.DateTime)]
-    public DateTime? CreatedAt { get; set; } 
-    
+    public DateTime? CreatedAt { get; set; }
+
     [CreatedBy]
     [Column("created_by", DbType.String)]
     public string? CreatedBy { get; set; }
-    
+
     [LastUpdatedOn]
     [Column("updated_at", DbType.DateTime)]
-    public DateTime? UpdatedAt { get; set; } 
-    
+    public DateTime? UpdatedAt { get; set; }
+
     [LastUpdatedBy]
     [Column("updated_by", DbType.String)]
     public string? UpdatedBy { get; set; }
 
-    [Json]
-    public string? JsonProperty { get; set; }
-    
-    [NonUpdateable]
-    public string? NonUpdateableColumn { get; set; }
+    [Json] public string? JsonProperty { get; set; }
 
+    [NonUpdateable] public string? NonUpdateableColumn { get; set; }
 }
 
 public enum NameEnum

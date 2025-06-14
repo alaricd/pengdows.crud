@@ -1,8 +1,12 @@
+#region
+
 using System;
 using System.Data;
 using System.Threading.Tasks;
 using pengdows.crud.enums;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests;
 
@@ -15,8 +19,8 @@ public class SqlContainerTests : SqlLiteContextTestBase
         // Create an in-memory SQLite connection
         // _connection = new SqliteConnection("Data Source=:memory:");
         // _connection.Open();
-        base.TypeMap.Register<TestEntity>();
-        this.entityHelper = new EntityHelper<TestEntity, int>(Context, null);
+        TypeMap.Register<TestEntity>();
+        entityHelper = new EntityHelper<TestEntity, int>(Context, null);
         Assert.Equal(DbMode.SingleConnection, Context.ConnectionMode);
         BuildTestTable();
     }
@@ -155,6 +159,4 @@ public class SqlContainerTests : SqlLiteContextTestBase
         Assert.False(await reader.ReadAsync());
         AssertProperNumberOfConnectionsForMode();
     }
-
-    
 }

@@ -1,7 +1,11 @@
-﻿using pengdows.crud.enums;
-using WebApplication1.Generator;
+﻿#region
+
 using System.Data;
 using pengdows.crud.dynamic.DynamicPocoGenerator;
+using pengdows.crud.enums;
+using WebApplication1.Generator;
+
+#endregion
 
 namespace pengdows.crud.dynamic;
 
@@ -47,10 +51,7 @@ FROM {0}information_schema{1}.{0}columns{1}",
             var schema = readerColumns.GetString(0);
             var table = readerColumns.GetString(1);
             var key = $"{schema}.{table}";
-            if (!tables.TryGetValue(key, out var tableDef))
-            {
-                continue;
-            }
+            if (!tables.TryGetValue(key, out var tableDef)) continue;
 
             var col = new ColumnDef
             {
@@ -59,7 +60,7 @@ FROM {0}information_schema{1}.{0}columns{1}",
                     readerColumns.IsDBNull(4) ? null : readerColumns.GetInt32(4),
                     readerColumns.IsDBNull(5) ? null : readerColumns.GetInt32(5)) ?? DbType.Object,
                 Precision = readerColumns.IsDBNull(4) ? null : readerColumns.GetInt32(4),
-                Scale = readerColumns.IsDBNull(5) ? null : readerColumns.GetInt32(5),
+                Scale = readerColumns.IsDBNull(5) ? null : readerColumns.GetInt32(5)
             };
             col.Type = "string"; // default, could enhance based on DbType
 
@@ -245,7 +246,7 @@ WHERE {0}rf{1}.{0}rdb$system_flag{1} = {3}", qp, qs,
         var qp = _context.QuotePrefix;
         var qs = _context.QuoteSuffix;
         var pk = sqlContainer.AddParameterWithValue(DbType.String, "PRIMARY_KEY");
-        string identityExpr = _context.Product switch
+        var identityExpr = _context.Product switch
         {
             SupportedDatabase.MySql or SupportedDatabase.MariaDb =>
                 $"CASE WHEN c.{0}extra{1} LIKE '%auto_increment%' THEN 1 ELSE 0 END",

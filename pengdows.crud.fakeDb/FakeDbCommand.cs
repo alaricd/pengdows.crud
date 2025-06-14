@@ -11,7 +11,7 @@ public sealed class FakeDbCommand : DbCommand
 {
     public FakeDbCommand(DbConnection connection)
     {
-        this.Connection = connection;
+        Connection = connection;
     }
 
     public FakeDbCommand()

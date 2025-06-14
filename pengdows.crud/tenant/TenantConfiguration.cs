@@ -1,6 +1,6 @@
-namespace pengdows.crud.tenant;
-
 using pengdows.crud.configuration;
+
+namespace pengdows.crud.tenant;
 
 public class TenantConfiguration
 {

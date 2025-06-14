@@ -21,12 +21,6 @@ public class FakeDbDataReader : DbDataReader
     public FakeDbDataReader() : this(new List<Dictionary<string, object>>())
     {
     }
-    
-    public override Task<T> GetFieldValueAsync<T>(int ordinal, CancellationToken cancellationToken)
-    {
-        var value = GetValue(ordinal);
-        return Task.FromResult((T)Convert.ChangeType(value, typeof(T)));
-    }
 
     public override int FieldCount
         => _rows.FirstOrDefault()?.Count ?? 0;
@@ -42,6 +36,12 @@ public class FakeDbDataReader : DbDataReader
     public override object this[string name] => GetValue(GetOrdinal(name));
 
     public override bool IsClosed => false;
+
+    public override Task<T> GetFieldValueAsync<T>(int ordinal, CancellationToken cancellationToken)
+    {
+        var value = GetValue(ordinal);
+        return Task.FromResult((T)Convert.ChangeType(value, typeof(T)));
+    }
 
     public override bool Read()
     {

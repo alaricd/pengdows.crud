@@ -1,7 +1,11 @@
+#region
+
 using System.Data.Common;
 using System.Reflection;
 using pengdows.crud.enums;
 using pengdows.crud.wrappers;
+
+#endregion
 
 namespace pengdows.crud;
 
@@ -34,12 +38,14 @@ public interface IEntityHelper<TEntity, TRowID> where TEntity : class, new()
     /// <summary>
     /// Builds a SQL SELECT for a list of row IDs.
     /// </summary>
-    ISqlContainer BuildRetrieve(IReadOnlyCollection<TRowID>? listOfIds = null, string alias = "a", IDatabaseContext? context = null);
+    ISqlContainer BuildRetrieve(IReadOnlyCollection<TRowID>? listOfIds = null, string alias = "a",
+        IDatabaseContext? context = null);
 
     /// <summary>
     /// Builds a SQL SELECT for a list of object identities.
     /// </summary>
-    ISqlContainer BuildRetrieve(IReadOnlyCollection<TEntity>? listOfObjects = null, string alias = "a", IDatabaseContext? context = null);
+    ISqlContainer BuildRetrieve(IReadOnlyCollection<TEntity>? listOfObjects = null, string alias = "a",
+        IDatabaseContext? context = null);
 
     /// <summary>
     /// Overload for retrieving by ID without alias.

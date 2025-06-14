@@ -8,28 +8,28 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="FirebirdSql.Data.FirebirdClient" Version="10.3.3" />
-        <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2" />
-        <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.5" />
-        <PackageReference Include="MySql.Data" Version="9.3.0" />
-        <PackageReference Include="Npgsql" Version="9.0.3" />
-        <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.8.0" />
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.1" />
+        <PackageReference Include="FirebirdSql.Data.FirebirdClient" Version="10.3.3"/>
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2"/>
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.5"/>
+        <PackageReference Include="MySql.Data" Version="9.3.0"/>
+        <PackageReference Include="Npgsql" Version="9.0.3"/>
+        <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.8.0"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.1"/>
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="..\.dockerignore">
-        <Link>.dockerignore</Link>
-      </Content>
+        <Content Include="..\.dockerignore">
+            <Link>.dockerignore</Link>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Controllers\" />
-      <Folder Include="services\" />
+        <Folder Include="Controllers\"/>
+        <Folder Include="services\"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj" />
+        <ProjectReference Include="..\pengdows.crud\pengdows.crud.csproj"/>
     </ItemGroup>
 
 </Project>

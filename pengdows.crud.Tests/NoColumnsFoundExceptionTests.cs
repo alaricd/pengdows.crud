@@ -1,35 +1,38 @@
+#region
+
 using pengdows.crud.exceptions;
 using Xunit;
 
-namespace pengdows.crud.Tests
+#endregion
+
+namespace pengdows.crud.Tests;
+
+public class NoColumnsFoundExceptionTests
 {
-    public class NoColumnsFoundExceptionTests
+    [Fact]
+    public void Constructor_SetsMessageCorrectly()
     {
-        [Fact]
-        public void Constructor_SetsMessageCorrectly()
-        {
-            // Arrange
-            var message = "No columns were found for the entity.";
+        // Arrange
+        var message = "No columns were found for the entity.";
 
-            // Act
-            var ex = new NoColumnsFoundException(message);
+        // Act
+        var ex = new NoColumnsFoundException(message);
 
-            // Assert
-            Assert.Equal(message, ex.Message);
-        }
+        // Assert
+        Assert.Equal(message, ex.Message);
+    }
 
-        [Fact]
-        public async void CanBeThrownAndCaught()
-        {
-            // Arrange
-            var message = "Something went wrong";
+    [Fact]
+    public async void CanBeThrownAndCaught()
+    {
+        // Arrange
+        var message = "Something went wrong";
 
-            // Act & Assert
-            var thrown = await Record.ExceptionAsync(() => throw new NoColumnsFoundException(message));
-        
-            Assert.NotNull(thrown);
-            Assert.IsType<NoColumnsFoundException>(thrown);
-            Assert.Equal(message, thrown.Message);
-        }
+        // Act & Assert
+        var thrown = await Record.ExceptionAsync(() => throw new NoColumnsFoundException(message));
+
+        Assert.NotNull(thrown);
+        Assert.IsType<NoColumnsFoundException>(thrown);
+        Assert.Equal(message, thrown.Message);
     }
 }

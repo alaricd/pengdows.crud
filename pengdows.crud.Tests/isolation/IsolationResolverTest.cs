@@ -1,9 +1,13 @@
+#region
+
 using System;
 using System.Data;
 using System.Linq;
 using pengdows.crud.enums;
 using pengdows.crud.isolation;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests.isolation;
 

@@ -1,28 +1,28 @@
+#region
+
 using System.Security.Cryptography;
 using System.Text;
+
+#endregion
 
 namespace pengdows.crud;
 
 public sealed class EphemeralSecureString : IEphemeralSecureString, IDisposable
 {
-    private readonly byte[] _key;
-    private readonly byte[] _iv;
+    private const int TTL_MS = 750;
     private readonly byte[] _cipherText;
     private readonly Encoding _encoding;
+    private readonly byte[] _iv;
+    private readonly byte[] _key;
     private readonly object _lock = new();
 
     private byte[]? _cachedPlainBytes;
-    private Timer? _timer;
     private long _disposed;
-
-    private const int TTL_MS = 750; 
+    private Timer? _timer;
 
     public EphemeralSecureString(string input)
     {
-        if (input == null)
-        {
-            throw new ArgumentNullException(nameof(input));
-        }
+        if (input == null) throw new ArgumentNullException(nameof(input));
 
         _encoding = Encoding.UTF8;
 
@@ -37,22 +37,27 @@ public sealed class EphemeralSecureString : IEphemeralSecureString, IDisposable
 
     public string Reveal()
     {
-        if (Interlocked.Read(ref _disposed) == 1)
-        {
-            throw new ObjectDisposedException(nameof(EphemeralSecureString));
-        }
+        if (Interlocked.Read(ref _disposed) == 1) throw new ObjectDisposedException(nameof(EphemeralSecureString));
 
         lock (_lock)
         {
-            if (_cachedPlainBytes == null)
-            {
-                _cachedPlainBytes = DecryptBytes(_cipherText, _key, _iv);
-            }
+            if (_cachedPlainBytes == null) _cachedPlainBytes = DecryptBytes(_cipherText, _key, _iv);
 
             _timer?.Dispose();
             _timer = new Timer(ClearPlainText, null, TTL_MS, Timeout.Infinite);
 
             return _encoding.GetString(_cachedPlainBytes);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            ClearPlainText(null);
+            CryptographicOperations.ZeroMemory(_key);
+            CryptographicOperations.ZeroMemory(_iv);
+            CryptographicOperations.ZeroMemory(_cipherText);
         }
     }
 
@@ -74,17 +79,6 @@ public sealed class EphemeralSecureString : IEphemeralSecureString, IDisposable
 
             _timer?.Dispose();
             _timer = null;
-        }
-    }
-
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
-        {
-            ClearPlainText(null);
-            CryptographicOperations.ZeroMemory(_key);
-            CryptographicOperations.ZeroMemory(_iv);
-            CryptographicOperations.ZeroMemory(_cipherText);
         }
     }
 

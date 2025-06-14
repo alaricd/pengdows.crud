@@ -1,9 +1,5 @@
-#region
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-
-#endregion
 
 namespace pengdows.crud.tenant;
 
@@ -29,6 +25,7 @@ public static class TenantServiceCollectionExtensions
 
         // Register options to enable IOptions<MultiTenantOptions>
         services.Configure<MultiTenantOptions>(configuration.GetSection("MultiTenant"));
+
         services.AddSingleton<ITenantConnectionResolver>(TenantConnectionResolver.Instance);
         services.AddSingleton<ITenantContextRegistry, TenantContextRegistry>();
 

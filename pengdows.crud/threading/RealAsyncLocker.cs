@@ -2,9 +2,9 @@ namespace pengdows.crud.threading;
 
 internal sealed class RealAsyncLocker : ILockerAsync
 {
-    private bool _locked = false;
     private readonly SemaphoreSlim _semaphore;
     private int _disposed;
+    private bool _locked = false;
 
     public RealAsyncLocker(SemaphoreSlim semaphore)
     {
@@ -23,10 +23,7 @@ internal sealed class RealAsyncLocker : ILockerAsync
         //Console.WriteLine("Disposing real-async-locker");
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
-            if (!_locked)
-            {
-                throw new InvalidOperationException("Lock has not been acquired.");
-            }
+            if (!_locked) throw new InvalidOperationException("Lock has not been acquired.");
 
             _semaphore.Release();
         }

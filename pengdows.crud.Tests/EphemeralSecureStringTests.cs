@@ -1,6 +1,10 @@
+#region
+
 using System;
 using System.Threading;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests;
 
@@ -38,7 +42,7 @@ public class EphemeralSecureStringTests
         var first = ess.Reveal();
         var second = ess.Reveal();
 
-        Assert.True(String.Compare(first, second, StringComparison.InvariantCulture) == 0);
+        Assert.True(string.Compare(first, second, StringComparison.InvariantCulture) == 0);
     }
 
     [Fact]

@@ -1,8 +1,12 @@
+#region
+
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using MySql.Data.MySqlClient;
 using pengdows.crud;
+
+#endregion
 
 namespace testbed;
 
@@ -10,10 +14,10 @@ public class MySqlTestContainer : TestContainer
 {
     private readonly IContainer _container;
     private string? _connectionString;
-    private string _password = "rootpassword";
-    private string _username = "root";
     private string _database = "testdb";
+    private string _password = "rootpassword";
     private int _port = 3306;
+    private string _username = "root";
 
     // run --name mysql-container -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=testdb -p 3306:3306 -d mysql:latest
 
@@ -48,5 +52,8 @@ public class MySqlTestContainer : TestContainer
             services.GetRequiredService<ITypeMapRegistry>());
     }
 
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+          await _container.DisposeAsync();
+    }
 }

@@ -1,6 +1,8 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 
+#region
+
 using System.Data.Common;
 using AdoNetCore.AseClient;
 using FirebirdSql.Data.FirebirdClient;
@@ -12,10 +14,10 @@ using pengdows.crud;
 using testbed;
 using testbed.Cockroach;
 
+#endregion
+
 foreach (var (assembly, type, factory) in DbProviderFactoryFinder.FindAllFactories())
-{
     Console.WriteLine($"Found: {type} in {assembly}");
-}
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddScoped<IAuditContextProvider<string>, StringAuditContextProvider>();
@@ -134,7 +136,7 @@ async Task WaitForDbToStart(DbProviderFactory instance, string connectionString,
                     UserID = orig.UserID,
                     Password = orig.Password,
                     Charset = orig.Charset,
-                    Pooling = false,
+                    Pooling = false
                 };
 
                 await using var createConn = instance.CreateConnection();
@@ -159,10 +161,7 @@ async Task WaitForDbToStart(DbProviderFactory instance, string connectionString,
         catch (Exception ex)
         {
             var currentError = ex.Message;
-            if (currentError != lastError)
-            {
-                Console.WriteLine(currentError);
-            }
+            if (currentError != lastError) Console.WriteLine(currentError);
 
             lastError = currentError;
             await Task.Delay(1000);

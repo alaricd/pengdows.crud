@@ -25,10 +25,10 @@ public class TenantServiceCollectionExtensionsTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-
         services.AddMultiTenancy(config);
 
         var provider = services.BuildServiceProvider();
+
         var resolver = provider.GetRequiredService<ITenantConnectionResolver>();
         var contextRegistry = provider.GetRequiredService<ITenantContextRegistry>();
         var options = provider.GetRequiredService<IOptions<MultiTenantOptions>>();

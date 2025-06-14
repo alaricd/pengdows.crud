@@ -1,11 +1,19 @@
+#region
+
 using System.Data;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using pengdows.crud.dynamic;
 using pengdows.crud.enums;
+using CSharpCompilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation;
+using CSharpCompilationOptions = Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions;
+using CSharpSyntaxTree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree;
+using DiagnosticSeverity = Microsoft.CodeAnalysis.DiagnosticSeverity;
+using MetadataReference = Microsoft.CodeAnalysis.MetadataReference;
+using OutputKind = Microsoft.CodeAnalysis.OutputKind;
+
+#endregion
 
 namespace WebApplication1.Generator;
 
@@ -18,10 +26,7 @@ public static class PocoCompilerService
         var hash = GetSchemaHash(tables);
         var dllPath = Path.Combine(OutputDir, $"poco_{hash}.dll");
 
-        if (File.Exists(dllPath))
-        {
-            return Assembly.LoadFrom(dllPath);
-        }
+        if (File.Exists(dllPath)) return Assembly.LoadFrom(dllPath);
 
         var code = GenerateCode(tables);
         var assembly = Compile(code, dllPath);
@@ -47,17 +52,14 @@ public static class PocoCompilerService
         foreach (var table in tables)
         {
             sb.Append($"  [Table(\"{table.Name}\"");
-            if (!string.IsNullOrEmpty(table.Schema))
-            {
-                sb.Append(", \"{table.Schema}\"");
-            }
+            if (!string.IsNullOrEmpty(table.Schema)) sb.Append(", \"{table.Schema}\"");
 
             sb.AppendLine($")]\n  public class {table.Name} {{");
 
             foreach (var col in table.Columns)
             {
                 WriteColumnAttributes(sb, col);
-                
+
                 sb.AppendLine($"    public {col.Type} {col.Name} {{ get; set; }}");
             }
 
@@ -70,7 +72,6 @@ public static class PocoCompilerService
 
     private static void WriteColumnAttributes(StringBuilder sb, ColumnDef col)
     {
-        
     }
 
     private static Assembly Compile(string sourceCode, string dllPath)
@@ -117,71 +118,89 @@ public static class PocoCompilerService
         };
     }
 
-    private static DbType? MapSqlServer(string type, int? precision, int? scale) => type switch
+    private static DbType? MapSqlServer(string type, int? precision, int? scale)
     {
-        "int" => DbType.Int32,
-        "bigint" => DbType.Int64,
-        "smallint" => DbType.Int16,
-        "tinyint" => DbType.Byte,
-        "bit" => DbType.Boolean,
-        "varchar" or "nvarchar" or "text" or "ntext" => DbType.String,
-        "char" or "nchar" => DbType.StringFixedLength,
-        "datetime" or "smalldatetime" => DbType.DateTime,
-        "decimal" or "numeric" => MapDecimal(precision, scale),
-        _ => null
-    };
+        return type switch
+        {
+            "int" => DbType.Int32,
+            "bigint" => DbType.Int64,
+            "smallint" => DbType.Int16,
+            "tinyint" => DbType.Byte,
+            "bit" => DbType.Boolean,
+            "varchar" or "nvarchar" or "text" or "ntext" => DbType.String,
+            "char" or "nchar" => DbType.StringFixedLength,
+            "datetime" or "smalldatetime" => DbType.DateTime,
+            "decimal" or "numeric" => MapDecimal(precision, scale),
+            _ => null
+        };
+    }
 
-    private static DbType? MapPostgres(string type, int? precision, int? scale) => type switch
+    private static DbType? MapPostgres(string type, int? precision, int? scale)
     {
-        "int4" or "integer" => DbType.Int32,
-        "int8" or "bigint" => DbType.Int64,
-        "int2" or "smallint" => DbType.Int16,
-        "bool" or "boolean" => DbType.Boolean,
-        "text" or "varchar" => DbType.String,
-        "uuid" => DbType.Guid,
-        "numeric" or "decimal" => MapDecimal(precision, scale),
-        _ => null
-    };
+        return type switch
+        {
+            "int4" or "integer" => DbType.Int32,
+            "int8" or "bigint" => DbType.Int64,
+            "int2" or "smallint" => DbType.Int16,
+            "bool" or "boolean" => DbType.Boolean,
+            "text" or "varchar" => DbType.String,
+            "uuid" => DbType.Guid,
+            "numeric" or "decimal" => MapDecimal(precision, scale),
+            _ => null
+        };
+    }
 
-    private static DbType? MapMySql(string type, int? precision, int? scale) => type switch
+    private static DbType? MapMySql(string type, int? precision, int? scale)
     {
-        "int" or "integer" => DbType.Int32,
-        "bigint" => DbType.Int64,
-        "smallint" => DbType.Int16,
-        "tinyint" => DbType.Byte,
-        "bit" => DbType.Boolean,
-        "varchar" or "text" => DbType.String,
-        "decimal" or "numeric" => MapDecimal(precision, scale),
-        _ => null
-    };
+        return type switch
+        {
+            "int" or "integer" => DbType.Int32,
+            "bigint" => DbType.Int64,
+            "smallint" => DbType.Int16,
+            "tinyint" => DbType.Byte,
+            "bit" => DbType.Boolean,
+            "varchar" or "text" => DbType.String,
+            "decimal" or "numeric" => MapDecimal(precision, scale),
+            _ => null
+        };
+    }
 
-    private static DbType? MapOracle(string type, int? precision, int? scale) => type switch
+    private static DbType? MapOracle(string type, int? precision, int? scale)
     {
-        "number" => MapDecimal(precision, scale),
-        "varchar2" or "nvarchar2" => DbType.String,
-        "char" or "nchar" => DbType.StringFixedLength,
-        "date" => DbType.DateTime,
-        _ => null
-    };
+        return type switch
+        {
+            "number" => MapDecimal(precision, scale),
+            "varchar2" or "nvarchar2" => DbType.String,
+            "char" or "nchar" => DbType.StringFixedLength,
+            "date" => DbType.DateTime,
+            _ => null
+        };
+    }
 
-    private static DbType? MapSqlite(string type, int? precision, int? scale) => type switch
+    private static DbType? MapSqlite(string type, int? precision, int? scale)
     {
-        "integer" => DbType.Int64,
-        "text" => DbType.String,
-        "real" => DbType.Double,
-        "numeric" => MapDecimal(precision, scale),
-        _ => null
-    };
+        return type switch
+        {
+            "integer" => DbType.Int64,
+            "text" => DbType.String,
+            "real" => DbType.Double,
+            "numeric" => MapDecimal(precision, scale),
+            _ => null
+        };
+    }
 
-    private static DbType? MapFirebird(string type, int? precision, int? scale) => type switch
+    private static DbType? MapFirebird(string type, int? precision, int? scale)
     {
-        "smallint" => DbType.Int16,
-        "integer" => DbType.Int32,
-        "bigint" => DbType.Int64,
-        "varchar" or "char" => DbType.String,
-        "decimal" or "numeric" => MapDecimal(precision, scale),
-        _ => null
-    };
+        return type switch
+        {
+            "smallint" => DbType.Int16,
+            "integer" => DbType.Int32,
+            "bigint" => DbType.Int64,
+            "varchar" or "char" => DbType.String,
+            "decimal" or "numeric" => MapDecimal(precision, scale),
+            _ => null
+        };
+    }
 
     private static DbType MapDecimal(int? precision, int? scale)
     {

@@ -1,32 +1,35 @@
+#region
+
 using System;
 using System.Reflection;
 using pengdows.crud.attributes;
 using Xunit;
 
-namespace pengdows.crud.Tests
+#endregion
+
+namespace pengdows.crud.Tests;
+
+public class NonUpdateableAttributeTests
 {
-    public class NonUpdateableAttributeTests
+    [Fact]
+    public void Should_OnlyBeAllowed_OnProperties()
     {
-        [Fact]
-        public void Should_OnlyBeAllowed_OnProperties()
-        {
-            var usage = typeof(NonUpdateableAttribute)
-                .GetCustomAttribute<AttributeUsageAttribute>();
+        var usage = typeof(NonUpdateableAttribute)
+            .GetCustomAttribute<AttributeUsageAttribute>();
 
-            Assert.NotNull(usage);
-            Assert.True(usage.ValidOn.HasFlag(AttributeTargets.Property));
-            Assert.False(usage.ValidOn.HasFlag(AttributeTargets.Class));
-            Assert.False(usage.AllowMultiple); // single use only
-            Assert.True(usage.Inherited);     
-        }
-        
-        [Fact]
-        public void ShouldHave_NonUpdateableAttribute()
-        {
-            var prop = typeof(TestTable).GetProperty("NonUpdateableColumn");
+        Assert.NotNull(usage);
+        Assert.True(usage.ValidOn.HasFlag(AttributeTargets.Property));
+        Assert.False(usage.ValidOn.HasFlag(AttributeTargets.Class));
+        Assert.False(usage.AllowMultiple); // single use only
+        Assert.True(usage.Inherited);
+    }
 
-            var attr = prop?.GetCustomAttribute<NonUpdateableAttribute>();
-            Assert.NotNull(attr);
-        }
+    [Fact]
+    public void ShouldHave_NonUpdateableAttribute()
+    {
+        var prop = typeof(TestTable).GetProperty("NonUpdateableColumn");
+
+        var attr = prop?.GetCustomAttribute<NonUpdateableAttribute>();
+        Assert.NotNull(attr);
     }
 }

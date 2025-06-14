@@ -1,13 +1,17 @@
+#region
+
 using System.Data;
+
+#endregion
 
 namespace pengdows.crud;
 
 public interface ITransactionContext : IDatabaseContext
 {
-    void Commit();
-    void Rollback();
     bool WasCommitted { get; }
     bool WasRolledBack { get; }
     bool IsCompleted { get; }
     IsolationLevel IsolationLevel { get; }
+    void Commit();
+    void Rollback();
 }

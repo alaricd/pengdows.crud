@@ -1,9 +1,13 @@
-﻿using System.Data;
+﻿#region
+
+using System.Data;
 using System.Data.Common;
 using pengdows.crud.enums;
 using pengdows.crud.infrastructure;
 using pengdows.crud.threading;
 using pengdows.crud.wrappers;
+
+#endregion
 
 namespace pengdows.crud;
 

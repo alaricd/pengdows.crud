@@ -1,3 +1,5 @@
+#region
+
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -7,6 +9,8 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using pengdows.crud.configuration;
 using Xunit;
+
+#endregion
 
 namespace pengdows.crud.Tests.configuration;
 
@@ -24,12 +28,6 @@ public class DbProviderLoaderTests
     {
         var config = new ConfigurationBuilder().Build();
         Assert.Throws<ArgumentNullException>(() => new DbProviderLoader(config, null!));
-    }
-
-    private class PropertyFactory : DbProviderFactory
-    {
-        public static PropertyFactory Instance { get; } = new PropertyFactory();
-        private PropertyFactory() { }
     }
 
     [Fact]
@@ -92,5 +90,14 @@ public class DbProviderLoaderTests
         var loader = new DbProviderLoader(config, logger.Object);
 
         Assert.Throws<InvalidOperationException>(() => loader.LoadAndRegisterProviders(new ServiceCollection()));
+    }
+
+    private class PropertyFactory : DbProviderFactory
+    {
+        private PropertyFactory()
+        {
+        }
+
+        public static PropertyFactory Instance { get; } = new();
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using pengdows.crud.configuration;
 using pengdows.crud.enums;
 using pengdows.crud.tenant;
@@ -8,41 +9,6 @@ namespace pengdows.crud.Tests.tenant;
 
 public class TenantConnectionResolverTests
 {
-    [Fact]
-    public void GetTenantInfo_ReturnsExpectedTenantInformation()
-    {
-        // Arrange
-        ITenantConnectionResolver resolver = new TestTenantConnectionResolver();
-        var tenant = "acme";
-
-        // Act
-        var info = resolver.GetDatabaseContextConfiguration(tenant);
-
-        // Assert
-        Assert.Equal("Microsoft.Data.Sqlite", info.ProviderName);
-        Assert.Equal("Server=db;Database=acme;", info.ConnectionString);
-    }
-
-    [Fact]
-    public void Register_And_GetConfiguration_Should_ReturnSameInstance()
-    {
-        // Arrange
-        var tenantId = "tenant-a";
-        var config = new DatabaseContextConfiguration
-        {
-            ConnectionString = "Server=A;",
-            DbMode = DbMode.Standard,
-            ReadWriteMode = ReadWriteMode.ReadWrite
-        };
-
-        // Act
-        TenantConnectionResolver.Register(tenantId, config);
-        var result = TenantConnectionResolver.Instance.GetDatabaseContextConfiguration(tenantId);
-
-        // Assert
-        Assert.Same(config, result);
-    }
-
     [Fact]
     public void Register_MultipleTenants_Should_StoreAllConfigurations()
     {
@@ -79,6 +45,41 @@ public class TenantConnectionResolverTests
         // Assert
         Assert.Same(tenantA.DatabaseContextConfiguration, resultA);
         Assert.Same(tenantB.DatabaseContextConfiguration, resultB);
+    }
+
+    [Fact]
+    public void GetTenantInfo_ReturnsExpectedTenantInformation()
+    {
+        // Arrange
+        ITenantConnectionResolver resolver = new TestTenantConnectionResolver();
+        var tenant = "acme";
+
+        // Act
+        var info = resolver.GetDatabaseContextConfiguration(tenant);
+
+        // Assert
+        Assert.Equal("Microsoft.Data.Sqlite", info.ProviderName);
+        Assert.Equal("Server=db;Database=acme;", info.ConnectionString);
+    }
+
+    [Fact]
+    public void Register_And_GetConfiguration_Should_ReturnSameInstance()
+    {
+        // Arrange
+        var tenantId = "tenant-a";
+        var config = new DatabaseContextConfiguration
+        {
+            ConnectionString = "Server=A;",
+            DbMode = DbMode.Standard,
+            ReadWriteMode = ReadWriteMode.ReadWrite
+        };
+
+        // Act
+        TenantConnectionResolver.Register(tenantId, config);
+        var result = TenantConnectionResolver.Instance.GetDatabaseContextConfiguration(tenantId);
+
+        // Assert
+        Assert.Same(config, result);
     }
 
     [Fact]

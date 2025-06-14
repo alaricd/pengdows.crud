@@ -9,8 +9,8 @@ namespace pengdows.crud.FakeDb;
 
 public sealed class FakeDbFactory : DbProviderFactory
 {
-    private readonly SupportedDatabase _pretendToBe;
     public static readonly FakeDbFactory Instance = new();
+    private readonly SupportedDatabase _pretendToBe;
 
     private FakeDbFactory()
     {

@@ -1,10 +1,14 @@
+#region
+
 using pengdows.crud;
+
+#endregion
 
 namespace WebApplication1;
 
 public class UserEntityHelper : EntityHelper<UserEntity, int>
 {
-    public UserEntityHelper(IDatabaseContext ctx, 
+    public UserEntityHelper(IDatabaseContext ctx,
         IAuditValueResolver auditProvider)
         : base(ctx, auditProvider)
     {

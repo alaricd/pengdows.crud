@@ -1,4 +1,8 @@
+#region
+
 using pengdows.crud;
+
+#endregion
 
 namespace testbed;
 
@@ -7,7 +11,8 @@ public class PostgreSQLTestProvider
 {
     private readonly IDatabaseContext context;
 
-    public PostgreSQLTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context, serviceProvider)
+    public PostgreSQLTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context,
+        serviceProvider)
     {
         this.context = context;
     }
@@ -23,7 +28,7 @@ public class PostgreSQLTestProvider
         {
             await sqlContainer.ExecuteNonQueryAsync();
         }
-        catch  
+        catch
         {
             // Table did not exist, ignore
         }
