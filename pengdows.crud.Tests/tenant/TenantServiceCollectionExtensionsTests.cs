@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using pengdows.crud.configuration;
 using pengdows.crud.tenant;
 using Xunit;
@@ -30,9 +31,11 @@ public class TenantServiceCollectionExtensionsTests
         var provider = services.BuildServiceProvider();
         var resolver = provider.GetRequiredService<ITenantConnectionResolver>();
         var contextRegistry = provider.GetRequiredService<ITenantContextRegistry>();
+        var options = provider.GetRequiredService<IOptions<MultiTenantOptions>>();
 
         Assert.Equal("Server=A;", resolver.GetDatabaseContextConfiguration("a").ConnectionString);
         Assert.Equal("Server=B;", resolver.GetDatabaseContextConfiguration("b").ConnectionString);
         Assert.NotNull(contextRegistry);
+        Assert.Equal(2, options.Value.Tenants.Count);
     }
 }
