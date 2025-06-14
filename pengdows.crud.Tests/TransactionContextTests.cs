@@ -30,21 +30,7 @@ public class TransactionContextTests
         var dbContext = new DatabaseContext(config, factory);
         return dbContext;
     }
-
-    // public TransactionContextTests()
-    // {
-    //     _mockContext.Setup(c => c.GetConnection(It.IsAny<ExecutionType>(), true)).Returns(_mockConnection.Object);
-    //     _mockConnection.Setup(c => c.BeginTransaction(It.IsAny<IsolationLevel>())).Returns(_mockTransaction.Object);
-    //     _mockConnection.Setup(c => c.State).Returns(ConnectionState.Open);
-    // }
-
-    // [Theory]
-    // [InlineData(input, expected)]
-    // public void ShouldReturnCorrectValue(string input, string expected)
-    // {
-    //     
-    // }
-    // [Fact]
+ 
     [Theory]
     [InlineData(SupportedDatabase.CockroachDb, IsolationLevel.Serializable)]
     [InlineData(SupportedDatabase.Sqlite, IsolationLevel.Serializable)]
@@ -184,7 +170,8 @@ public class TransactionContextTests
     public void BeginTransaction_WithIsolationProfile_Throws()
     {
         using var tx = CreateContext(SupportedDatabase.Sqlite).BeginTransaction();
-        Assert.Throws<InvalidOperationException>(() => tx.BeginTransaction(IsolationProfile.ReadCommitted));
+        Assert.Throws<InvalidOperationException>(() => tx.BeginTransaction(IsolationProfile.FastWithRisks
+        ));
     }
 
     [Fact]
