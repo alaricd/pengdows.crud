@@ -42,7 +42,7 @@ builder.Services.AddScoped<IDatabaseContext>(sp =>
         SqliteFactory.Instance,
         sp.GetRequiredService<ITypeMapRegistry>()));
 
-builder.Services.AddScoped<IAuditContextProvider<string>, HttpContextAuditProvider>();
+builder.Services.AddScoped<IAuditValueResolver, HttpContextAuditValueResolver>();
 builder.Services.AddScoped<IEntityHelper<UserEntity, int>, UserEntityHelper>();
 builder.Services.AddScoped<UserService>();
 
