@@ -1,12 +1,9 @@
-#region
-
 using System;
+using System.Collections.Generic;
 using pengdows.crud.configuration;
 using pengdows.crud.enums;
 using pengdows.crud.tenant;
 using Xunit;
-
-#endregion
 
 namespace pengdows.crud.Tests.tenant;
 
@@ -86,44 +83,6 @@ public class TenantConnectionResolverTests
     }
 
     [Fact]
-    public void Register_MultipleTenants_Should_StoreAllConfigurations1()
-    {
-        // Arrange
-        var tenantA = new TenantConfiguration
-        {
-            Name = "a",
-            DatabaseContextConfiguration = new DatabaseContextConfiguration
-            {
-                ConnectionString = "Server=A;",
-                DbMode = DbMode.Standard,
-                ReadWriteMode = ReadWriteMode.ReadWrite
-            }
-        };
-
-        var tenantB = new TenantConfiguration
-        {
-            Name = "b",
-            DatabaseContextConfiguration = new DatabaseContextConfiguration
-            {
-                ConnectionString = "Server=B;",
-                DbMode = DbMode.Standard,
-                ReadWriteMode = ReadWriteMode.ReadWrite
-            }
-        };
-
-        var list = new[] { tenantA, tenantB };
-
-        // Act
-        TenantConnectionResolver.Register(list);
-        var resultA = TenantConnectionResolver.Instance.GetDatabaseContextConfiguration("a");
-        var resultB = TenantConnectionResolver.Instance.GetDatabaseContextConfiguration("b");
-
-        // Assert
-        Assert.Same(tenantA.DatabaseContextConfiguration, resultA);
-        Assert.Same(tenantB.DatabaseContextConfiguration, resultB);
-    }
-
-    [Fact]
     public void GetConfiguration_UnregisteredTenant_ShouldThrow()
     {
         // Arrange
@@ -168,6 +127,49 @@ public class TenantConnectionResolverTests
         Assert.Equal("tenant", ex.ParamName);
     }
 
+    [Fact]
+    public void Register_WithOptions_ShouldStoreConfigurations()
+    {
+        var options = new MultiTenantOptions
+        {
+            Tenants = new List<TenantConfiguration>
+            {
+                new TenantConfiguration
+                {
+                    Name = "opts-a",
+                    DatabaseContextConfiguration = new DatabaseContextConfiguration
+                    {
+                        ConnectionString = "Server=OptA;",
+                        DbMode = DbMode.Standard,
+                        ReadWriteMode = ReadWriteMode.ReadWrite
+                    }
+                },
+                new TenantConfiguration
+                {
+                    Name = "opts-b",
+                    DatabaseContextConfiguration = new DatabaseContextConfiguration
+                    {
+                        ConnectionString = "Server=OptB;",
+                        DbMode = DbMode.Standard,
+                        ReadWriteMode = ReadWriteMode.ReadWrite
+                    }
+                }
+            }
+        };
+
+        TenantConnectionResolver.Register(options);
+
+        Assert.Equal("Server=OptA;", TenantConnectionResolver.Instance.GetDatabaseContextConfiguration("opts-a").ConnectionString);
+        Assert.Equal("Server=OptB;", TenantConnectionResolver.Instance.GetDatabaseContextConfiguration("opts-b").ConnectionString);
+    }
+
+    [Fact]
+    public void Register_NullOptions_ShouldThrow()
+    {
+        var ex = Assert.Throws<ArgumentNullException>(() => TenantConnectionResolver.Register((MultiTenantOptions)null!));
+        Assert.Equal("options", ex.ParamName);
+    }
+
     private class TestTenantConnectionResolver : ITenantConnectionResolver
     {
         public IDatabaseContextConfiguration GetDatabaseContextConfiguration(string tenant)
@@ -180,11 +182,5 @@ public class TenantConnectionResolverTests
                 ReadWriteMode = ReadWriteMode.ReadWrite
             };
         }
-    }
-
-    [Fact]
-    public void METHOD()
-    {
-        
     }
 }
