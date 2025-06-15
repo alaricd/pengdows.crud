@@ -136,7 +136,7 @@ public class TrackedConnection : ITrackedConnection, IAsyncDisposable
 
         _logger.LogDebug("Async disposing connection {Name}", _name);
 
-        if (_isSharedConnection) await _semaphoreSlim.WaitAsync().ConfigureAwait(false);
+        if (_isSharedConnection && _semaphoreSlim != null) await _semaphoreSlim.WaitAsync().ConfigureAwait(false);
 
         try
         {
@@ -151,7 +151,7 @@ public class TrackedConnection : ITrackedConnection, IAsyncDisposable
         }
         finally
         {
-            if (_isSharedConnection) _semaphoreSlim.Release();
+            if (_isSharedConnection && _semaphoreSlim != null) _semaphoreSlim.Release();
         }
     }
 

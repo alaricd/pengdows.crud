@@ -30,7 +30,7 @@ public class StringAuditContextProviderTests
         var provider = new StringAuditContextProvider();
 
         // Act
-        var now = provider.GetUtcNow();
+        var now = provider.Resolve().UtcNow;
 
         // Assert
         Assert.True(now.Kind == DateTimeKind.Utc);

@@ -20,7 +20,7 @@ foreach (var (assembly, type, factory) in DbProviderFactoryFinder.FindAllFactori
     Console.WriteLine($"Found: {type} in {assembly}");
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddScoped<IAuditContextProvider<string>, StringAuditContextProvider>();
+builder.Services.AddScoped<IAuditValueResolver, StringAuditContextProvider>();
 builder.Services.AddSingleton<ITypeMapRegistry, TypeMapRegistry>();
 
 var host = builder.Build();

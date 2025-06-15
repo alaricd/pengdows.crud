@@ -7,10 +7,19 @@ using pengdows.crud;
 namespace testbed;
 
 public class StringAuditContextProvider
-    : AuditContextProvider<string>
+    : IAuditValueResolver
 {
-    public override string GetCurrentUserIdentifier()
+    public string GetCurrentUserIdentifier()
     {
         return "testuser";
+    }
+
+    public IAuditValues Resolve()
+    {
+        var x = new AuditValues
+        {
+            UserId = GetCurrentUserIdentifier()
+        };
+        return x;
     }
 }

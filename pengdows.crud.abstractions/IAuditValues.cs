@@ -3,7 +3,7 @@ namespace pengdows.crud;
 public interface IAuditValues
 {
     object UserId { get; init; }
-    DateTime UtcNow { get; init; }
+    DateTime UtcNow { get; }
 
     T As<T>()
     {

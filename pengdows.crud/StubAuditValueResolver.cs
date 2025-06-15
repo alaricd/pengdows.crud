@@ -1,6 +1,6 @@
 namespace pengdows.crud;
 
-public class StubAuditValueResolver : IAuditValueResolver
+public class StubAuditValueResolver : AuditValueResolver
 {
     private readonly object _userId;
 
@@ -9,7 +9,7 @@ public class StubAuditValueResolver : IAuditValueResolver
         _userId = userId;
     }
 
-    public IAuditValues Resolve()
+    public override IAuditValues Resolve()
     {
         return new AuditValues
         {
