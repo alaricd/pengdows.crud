@@ -21,11 +21,9 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
 {
     private readonly DbProviderFactory _factory;
     private readonly ILogger<IDatabaseContext> _logger;
-    private bool _applyConnectionSessionSettings;
     private ITrackedConnection? _connection = null;
 
     private long _connectionCount;
-    private string _connectionSessionSettings;
     private string _connectionString;
     private DataSourceInformation _dataSourceInfo;
     private IIsolationResolver _isolationResolver;
@@ -33,6 +31,10 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     private bool _isSqlServer;
     private bool _isWriteConnection = true;
     private long _maxNumberOfOpenConnections;
+
+    private ParameterFactory _parameterFactory = null!;
+    private SessionSettingsManager _sessionSettingsManager = null!;
+    private ConnectionManager _connectionManager = null!;
 
     [Obsolete("Use the constructor that takes DatabaseContextConfiguration instead.")]
     public DatabaseContext(
@@ -137,7 +139,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     public IDataSourceInformation DataSourceInfo => _dataSourceInfo;
 
 
-    public string SessionSettingsPreamble => _connectionSessionSettings ?? "";
+    public string SessionSettingsPreamble => _sessionSettingsManager.SessionSettingsPreamble;
 
     public string WrapObjectName(string name)
     {
@@ -159,6 +161,133 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
         }
 
         return sb.ToString();
+    }
+
+    public DbParameter CreateDbParameter<T>(string? name, DbType type, T value)
+    {
+        return _parameterFactory.CreateDbParameter(name, type, value);
+    }
+
+    public DbParameter CreateDbParameter<T>(DbType type, T value)
+    {
+        return _parameterFactory.CreateDbParameter(type, value);
+    }
+
+    public string GenerateRandomName(int length = 5, int parameterNameMaxLength = 30)
+    {
+        return _parameterFactory.GenerateRandomName(length, parameterNameMaxLength);
+    }
+
+    public string MakeParameterName(DbParameter dbParameter)
+    {
+        return _parameterFactory.MakeParameterName(dbParameter);
+    }
+
+    public string MakeParameterName(string parameterName)
+    {
+        return _parameterFactory.MakeParameterName(parameterName);
+    }
+
+    public ITrackedConnection GetConnection(ExecutionType executionType, bool isShared = false)
+    {
+        return _connectionManager.GetConnection(executionType, isShared);
+    }
+
+    public void CloseAndDisposeConnection(ITrackedConnection? connection)
+    {
+        _connectionManager.CloseAndDisposeConnection(connection);
+    }
+
+    public async ValueTask CloseAndDisposeConnectionAsync(ITrackedConnection? connection)
+    {
+        await _connectionManager.CloseAndDisposeConnectionAsync(connection).ConfigureAwait(false);
+    }
+
+    public void AssertIsReadConnection()
+    {
+        _connectionManager.AssertIsReadConnection();
+    }
+
+    public void AssertIsWriteConnection()
+    {
+        _connectionManager.AssertIsWriteConnection();
+    }
+
+    public ProcWrappingStyle ProcWrappingStyle
+    {
+        get => _parameterFactory.ProcWrappingStyle;
+        set => _parameterFactory.ProcWrappingStyle = value;
+    }
+
+    public int MaxParameterLimit => _parameterFactory.MaxParameterLimit;
+
+    public long MaxNumberOfConnections => _connectionManager.MaxNumberOfConnections;
+
+    public long NumberOfOpenConnections => _connectionManager.NumberOfOpenConnections;
+
+    public string QuotePrefix => _connectionManager.QuotePrefix;
+
+    public string QuoteSuffix => _connectionManager.QuoteSuffix;
+
+    private void InitializeInternals(IDatabaseContextConfiguration config)
+    {
+        var connectionString = config.ConnectionString;
+        var mode = config.DbMode;
+        var readWriteMode = config.ReadWriteMode;
+        ITrackedConnection? conn = null;
+        try
+        {
+            _isReadConnection = (readWriteMode & ReadWriteMode.ReadOnly) == ReadWriteMode.ReadOnly;
+            _isWriteConnection = (readWriteMode & ReadWriteMode.WriteOnly) == ReadWriteMode.WriteOnly;
+
+            var rawConn = _factory.CreateConnection();
+            rawConn.ConnectionString = connectionString;
+            conn = new TrackedConnection(rawConn);
+            try
+            {
+                conn.Open();
+            }
+            catch (Exception ex)
+            {
+                throw new ConnectionFailedException(ex.Message);
+            }
+
+            _sessionSettingsManager = new SessionSettingsManager(_logger, _factory, connectionString);
+            _dataSourceInfo = DataSourceInformation.Create(conn);
+            _sessionSettingsManager.SetupConnectionSessionSettingsForProvider(conn, _dataSourceInfo);
+            Name = _dataSourceInfo.DatabaseProductName;
+            if (_dataSourceInfo.Product == SupportedDatabase.Sqlite)
+            {
+                var csb = _sessionSettingsManager.GetFactoryConnectionStringBuilder(string.Empty);
+                var ds = csb["Data Source"] as string;
+                ConnectionMode = ":memory:" == ds ? DbMode.SingleConnection : DbMode.SingleWriter;
+                mode = ConnectionMode;
+            }
+
+            if (mode != DbMode.Standard)
+            {
+                _sessionSettingsManager.ApplyConnectionSessionSettings(conn);
+                _connection = conn;
+            }
+
+            _parameterFactory = new ParameterFactory(_factory, _dataSourceInfo);
+            _connectionManager = new ConnectionManager(
+                _factory,
+                _logger,
+                connectionString,
+                _dataSourceInfo,
+                mode,
+                _isReadConnection,
+                _isWriteConnection,
+                _sessionSettingsManager,
+                _connection);
+        }
+        finally
+        {
+            _isolationResolver ??= new IsolationResolver(Product, RCSIEnabled);
+            if (mode == DbMode.Standard)
+                conn?.Dispose();
+        }
     }
 
 

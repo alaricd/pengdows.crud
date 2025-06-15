@@ -7,8 +7,17 @@ using pengdows.crud.wrappers;
 
 namespace pengdows.crud;
 
-public partial class DatabaseContext
+internal class ParameterFactory
 {
+    private readonly DbProviderFactory _factory;
+    private readonly IDataSourceInformation _info;
+
+    public ParameterFactory(DbProviderFactory factory, IDataSourceInformation info)
+    {
+        _factory = factory;
+        _info = info;
+    }
+
     public DbParameter CreateDbParameter<T>(string? name, DbType type, T value)
     {
         var p = _factory.CreateParameter() ?? throw new InvalidOperationException("Failed to create parameter.");
@@ -51,16 +60,16 @@ public partial class DatabaseContext
 
     public string MakeParameterName(string parameterName)
     {
-        return !_dataSourceInfo.SupportsNamedParameters
+        return !_info.SupportsNamedParameters
             ? "?"
-            : $"{_dataSourceInfo.ParameterMarker}{parameterName}";
+            : $"{_info.ParameterMarker}{parameterName}";
     }
 
     public ProcWrappingStyle ProcWrappingStyle
     {
-        get => _dataSourceInfo.ProcWrappingStyle;
-        set => _dataSourceInfo.ProcWrappingStyle = value;
+        get => _info.ProcWrappingStyle;
+        set => _info.ProcWrappingStyle = value;
     }
 
-    public int MaxParameterLimit => _dataSourceInfo.MaxParameterLimit;
+    public int MaxParameterLimit => _info.MaxParameterLimit;
 }

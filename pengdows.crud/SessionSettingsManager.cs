@@ -2,7 +2,6 @@
 using System.Data;
 using System.Data.Common;
 using System.Text;
-using pengdows.crud.configuration;
 using pengdows.crud.enums;
 using pengdows.crud.exceptions;
 using pengdows.crud.isolation;
@@ -10,13 +9,31 @@ using pengdows.crud.isolation;
 
 namespace pengdows.crud;
 
-public partial class DatabaseContext
+internal class SessionSettingsManager
 {
-    private void CheckForSqlServerSettings(ITrackedConnection conn)
+    private readonly ILogger<IDatabaseContext> _logger;
+    private readonly DbProviderFactory _factory;
+    private readonly string _connectionString;
+
+    private bool _applyConnectionSessionSettings;
+    private string _connectionSessionSettings = string.Empty;
+    private bool _isSqlServer;
+
+    public SessionSettingsManager(ILogger<IDatabaseContext> logger, DbProviderFactory factory, string connectionString)
+    {
+        _logger = logger;
+        _factory = factory;
+        _connectionString = connectionString;
+    }
+
+    public string SessionSettingsPreamble => _connectionSessionSettings ?? string.Empty;
+    public bool ApplySessionSettings => _applyConnectionSessionSettings;
+
+    public void CheckForSqlServerSettings(ITrackedConnection conn, DataSourceInformation info)
     {
         _isSqlServer =
-            _dataSourceInfo.DatabaseProductName.StartsWith("Microsoft SQL Server", StringComparison.OrdinalIgnoreCase)
-            && !_dataSourceInfo.DatabaseProductName.Contains("Compact", StringComparison.OrdinalIgnoreCase);
+            info.DatabaseProductName.StartsWith("Microsoft SQL Server", StringComparison.OrdinalIgnoreCase)
+            && !info.DatabaseProductName.Contains("Compact", StringComparison.OrdinalIgnoreCase);
 
         if (!_isSqlServer) return;
 
@@ -53,7 +70,7 @@ public partial class DatabaseContext
         }
     }
 
-    private StringBuilder CompareResults(Dictionary<string, string> expected, Dictionary<string, string> recorded)
+    private static StringBuilder CompareResults(Dictionary<string, string> expected, Dictionary<string, string> recorded)
     {
         var sb = new StringBuilder();
         foreach (var expectedKvp in expected)
@@ -69,64 +86,12 @@ public partial class DatabaseContext
         return sb;
     }
 
-    private void InitializeInternals(IDatabaseContextConfiguration config)
+    public void SetupConnectionSessionSettingsForProvider(ITrackedConnection conn, DataSourceInformation info)
     {
-        var connectionString = config.ConnectionString;
-        var mode = config.DbMode;
-        var readWriteMode = config.ReadWriteMode;
-        ITrackedConnection conn = null;
-        try
-        {
-            _isReadConnection = (readWriteMode & ReadWriteMode.ReadOnly) == ReadWriteMode.ReadOnly;
-            _isWriteConnection = (readWriteMode & ReadWriteMode.WriteOnly) == ReadWriteMode.WriteOnly;
-            conn = FactoryCreateConnection(connectionString, true);
-            try
-            {
-                conn.Open();
-            }
-            catch (Exception ex)
-            {
-                throw new ConnectionFailedException(ex.Message);
-            }
-
-            _dataSourceInfo = DataSourceInformation.Create(conn);
-            SetupConnectionSessionSettingsForProvider(conn);
-            Name = _dataSourceInfo.DatabaseProductName;
-            if (_dataSourceInfo.Product == SupportedDatabase.Sqlite)
-            {
-                var csb = GetFactoryConnectionStringBuilder(string.Empty);
-                var ds = csb["Data Source"] as string;
-                ConnectionMode = ":memory:" == ds ? DbMode.SingleConnection : DbMode.SingleWriter;
-                mode = ConnectionMode;
-            }
-
-            if (mode != DbMode.Standard)
-            {
-                ApplyConnectionSessionSettings(conn);
-                _connection = conn;
-            }
-        }
-        finally
-        {
-            _isolationResolver ??= new IsolationResolver(Product, RCSIEnabled);
-            if (mode == DbMode.Standard)
-                conn?.Dispose();
-        }
-    }
-
-    private DbConnectionStringBuilder GetFactoryConnectionStringBuilder(string connectionString)
-    {
-        var csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
-        csb.ConnectionString = string.IsNullOrEmpty(connectionString) ? _connectionString : connectionString;
-        return csb;
-    }
-
-    private void SetupConnectionSessionSettingsForProvider(ITrackedConnection conn)
-    {
-        switch (_dataSourceInfo.Product)
+        switch (info.Product)
         {
             case SupportedDatabase.SqlServer:
-                CheckForSqlServerSettings(conn);
+                CheckForSqlServerSettings(conn, info);
                 break;
             case SupportedDatabase.MySql:
             case SupportedDatabase.MariaDb:
@@ -153,7 +118,7 @@ public partial class DatabaseContext
         _applyConnectionSessionSettings = _connectionSessionSettings?.Length > 0;
     }
 
-    private void ApplyConnectionSessionSettings(IDbConnection connection)
+    public void ApplyConnectionSessionSettings(IDbConnection connection)
     {
         _logger.LogInformation("Applying connection session settings");
         if (_applyConnectionSessionSettings)
@@ -168,5 +133,12 @@ public partial class DatabaseContext
                 _logger.LogError("Error setting session settings:" + ex.Message);
                 _applyConnectionSessionSettings = false;
             }
+    }
+
+    public DbConnectionStringBuilder GetFactoryConnectionStringBuilder(string connectionString)
+    {
+        var csb = _factory.CreateConnectionStringBuilder() ?? new DbConnectionStringBuilder();
+        csb.ConnectionString = string.IsNullOrEmpty(connectionString) ? _connectionString : connectionString;
+        return csb;
     }
 }

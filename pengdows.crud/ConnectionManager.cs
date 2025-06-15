@@ -8,22 +8,50 @@ using pengdows.crud.wrappers;
 
 namespace pengdows.crud;
 
-public partial class DatabaseContext
+internal class ConnectionManager
 {
+    private readonly DbProviderFactory _factory;
+    private readonly ILogger<IDatabaseContext> _logger;
+    private readonly string _connectionString;
+    private readonly SessionSettingsManager _sessionSettings;
+    private readonly bool _isReadConnection;
+    private readonly bool _isWriteConnection;
+    private readonly DbMode _mode;
+    private readonly DataSourceInformation _info;
+    private ITrackedConnection? _connection;
+    private long _connectionCount;
+    private long _maxNumberOfOpenConnections;
+
+    public ConnectionManager(DbProviderFactory factory,
+        ILogger<IDatabaseContext> logger,
+        string connectionString,
+        DataSourceInformation info,
+        DbMode mode,
+        bool isReadConnection,
+        bool isWriteConnection,
+        SessionSettingsManager sessionSettings,
+        ITrackedConnection? connection = null)
+    {
+        _factory = factory;
+        _logger = logger;
+        _connectionString = connectionString;
+        _info = info;
+        _mode = mode;
+        _isReadConnection = isReadConnection;
+        _isWriteConnection = isWriteConnection;
+        _sessionSettings = sessionSettings;
+        _connection = connection;
+    }
+
     public ITrackedConnection GetConnection(ExecutionType executionType, bool isShared = false)
     {
-        switch (ConnectionMode)
+        return _mode switch
         {
-            case DbMode.Standard:
-            case DbMode.KeepAlive:
-                return GetStandardConnection(isShared);
-            case DbMode.SingleWriter:
-                return GetSingleWriterConnection(executionType);
-            case DbMode.SingleConnection:
-                return GetSingleConnection();
-            default:
-                throw new InvalidOperationException("Invalid connection mode.");
-        }
+            DbMode.Standard or DbMode.KeepAlive => GetStandardConnection(isShared),
+            DbMode.SingleWriter => GetSingleWriterConnection(executionType),
+            DbMode.SingleConnection => GetSingleConnection(),
+            _ => throw new InvalidOperationException("Invalid connection mode.")
+        };
     }
 
     public void AssertIsReadConnection()
@@ -42,8 +70,8 @@ public partial class DatabaseContext
     {
         if (connection == null) return;
 
-        _logger.LogInformation($"Connection mode is: {ConnectionMode}");
-        switch (ConnectionMode)
+        _logger.LogInformation($"Connection mode is: {_mode}");
+        switch (_mode)
         {
             case DbMode.SingleConnection:
             case DbMode.SingleWriter:
@@ -75,7 +103,7 @@ public partial class DatabaseContext
         if (connection == null)
             return;
 
-        _logger.LogInformation($"Async Closing Connection in mode: {ConnectionMode}");
+        _logger.LogInformation($"Async Closing Connection in mode: {_mode}");
 
         if (connection is IAsyncDisposable asyncConnection)
             await asyncConnection.DisposeAsync().ConfigureAwait(false);
@@ -85,10 +113,8 @@ public partial class DatabaseContext
 
     private ITrackedConnection FactoryCreateConnection(string? connectionString = null, bool isSharedConnection = false)
     {
-        SanitizeConnectionString(connectionString);
-
         var connection = _factory.CreateConnection();
-        connection.ConnectionString = ConnectionString;
+        connection.ConnectionString = string.IsNullOrWhiteSpace(connectionString) ? _connectionString : connectionString;
 
         var tracked = new TrackedConnection(
             connection,
@@ -100,34 +126,24 @@ public partial class DatabaseContext
                 {
                     case ConnectionState.Open:
                     {
-                        _logger.LogDebug("Opening connection: " + Name);
+                        _logger.LogDebug("Opening connection: " + _info.DatabaseProductName);
                         var now = Interlocked.Increment(ref _connectionCount);
                         UpdateMaxConnectionCount(now);
                         break;
                     }
                     case ConnectionState.Closed:
                     case ConnectionState.Broken:
-                        _logger.LogDebug("Closed or broken connection: " + Name);
+                        _logger.LogDebug("Closed or broken connection: " + _info.DatabaseProductName);
                         Interlocked.Decrement(ref _connectionCount);
                         break;
                 }
             },
-            onFirstOpen: ApplyConnectionSessionSettings,
+            onFirstOpen: _sessionSettings.ApplyConnectionSessionSettings,
             onDispose: conn => { _logger.LogDebug("Connection disposed."); },
             null,
             isSharedConnection
         );
         return tracked;
-    }
-
-    private void SanitizeConnectionString(string? connectionString)
-    {
-        if (connectionString != null && string.IsNullOrWhiteSpace(ConnectionString))
-        {
-            var csb = GetFactoryConnectionStringBuilder(connectionString);
-            var tmp = csb.ConnectionString;
-            ConnectionString = tmp;
-        }
     }
 
     private ITrackedConnection GetStandardConnection(bool isShared = false)
@@ -138,7 +154,7 @@ public partial class DatabaseContext
 
     private ITrackedConnection GetSingleConnection()
     {
-        return Connection;
+        return _connection ?? throw new ObjectDisposedException("attempt to use single connection from the wrong mode.");
     }
 
     private ITrackedConnection GetSingleWriterConnection(ExecutionType type, bool isShared = false)
@@ -166,6 +182,6 @@ public partial class DatabaseContext
 
     public long NumberOfOpenConnections => Interlocked.Read(ref _connectionCount);
 
-    public string QuotePrefix => DataSourceInfo.QuotePrefix;
-    public string QuoteSuffix => DataSourceInfo.QuoteSuffix;
+    public string QuotePrefix => _info.QuotePrefix;
+    public string QuoteSuffix => _info.QuoteSuffix;
 }
