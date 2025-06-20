@@ -6,11 +6,11 @@ using pengdows.crud;
 
 namespace testbed.Cockroach;
 
-public class CockroadDbTestProvider : TestProvider
+public class CockroachDbTestProvider : TestProvider
 {
     private readonly IDatabaseContext context;
 
-    public CockroadDbTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context,
+    public CockroachDbTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context,
         serviceProvider)
     {
         this.context = context;
