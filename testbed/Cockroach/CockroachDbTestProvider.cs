@@ -8,17 +8,17 @@ namespace testbed.Cockroach;
 
 public class CockroachDbTestProvider : TestProvider
 {
-    private readonly IDatabaseContext context;
+    private readonly IDatabaseContext _context;
 
     public CockroachDbTestProvider(IDatabaseContext context, IServiceProvider serviceProvider) : base(context,
         serviceProvider)
     {
-        this.context = context;
+        this._context = context;
     }
 
     public override async Task CreateTable()
     {
-        var databaseContext = context;
+        var databaseContext = _context;
         var sqlContainer = databaseContext.CreateSqlContainer();
         var qp = databaseContext.QuotePrefix;
         var qs = databaseContext.QuoteSuffix;
