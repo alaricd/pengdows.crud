@@ -68,7 +68,7 @@ internal class ParameterFactory
     public ProcWrappingStyle ProcWrappingStyle
     {
         get => _info.ProcWrappingStyle;
-        set => _info.ProcWrappingStyle = value;
+       // set => _info.ProcWrappingStyle = value;
     }
 
     public int MaxParameterLimit => _info.MaxParameterLimit;

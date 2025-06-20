@@ -216,7 +216,7 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
     public ProcWrappingStyle ProcWrappingStyle
     {
         get => _parameterFactory.ProcWrappingStyle;
-        set => _parameterFactory.ProcWrappingStyle = value;
+      //  set => _parameterFactory.ProcWrappingStyle = value;
     }
 
     public int MaxParameterLimit => _parameterFactory.MaxParameterLimit;

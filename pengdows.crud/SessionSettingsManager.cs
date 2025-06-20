@@ -2,9 +2,12 @@
 using System.Data;
 using System.Data.Common;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using pengdows.crud.enums;
 using pengdows.crud.exceptions;
 using pengdows.crud.isolation;
+using pengdows.crud.wrappers;
+
 #endregion
 
 namespace pengdows.crud;
