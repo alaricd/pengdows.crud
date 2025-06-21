@@ -502,6 +502,11 @@ public class DatabaseContext : SafeAsyncDisposableBase, IDatabaseContext
                 ApplyConnectionSessionSettings(conn);
                 _connection = conn;
             }
+            _isolationResolver ??= new IsolationResolver(Product, RCSIEnabled);
+        }
+        catch(Exception ex){
+            Console.WriteLine(ex.Message);
+            throw;
         }
         finally
         {
