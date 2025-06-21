@@ -63,7 +63,7 @@ await using (var liteDb = new DatabaseContext("Data Source=mydb.sqlite", SqliteF
 // await sybase.RunTestWithContainerAsync(host.Services, (db, sp) => new SybaseTestProvider(db, sp));
 
 await using var cockroach = new CockroachDbTestContainer();
-await cockroach.RunTestWithContainerAsync(host.Services, (db, sp) => new CockroadDbTestProvider(db, sp));
+await cockroach.RunTestWithContainerAsync(host.Services, (db, sp) => new CockroachDbTestProvider(db, sp));
 
 await using (var my = new MySqlTestContainer())
 {
